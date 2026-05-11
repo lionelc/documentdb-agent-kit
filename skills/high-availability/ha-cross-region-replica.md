@@ -39,7 +39,7 @@ Pair HA + cross-region replica for production-critical workloads:
 2. Create a replica cluster (`createMode: 'GeoReplica'`) in a paired or geographically near region. The replica reuses the primary's admin credentials, databases, collections, and documents — only the cluster name and region differ.
 3. Enable HA on the replica too — required for the combined 99.995 % SLA and for AZ placement after promotion.
 4. Route latency-sensitive reads in that region to the replica's connection string (read-only).
-5. Document and **periodically test** a promotion runbook for DR.
+5. Document and **periodically test** a promotion runbook for DR (see the [Promotion (DR failover) — runbook](#promotion-dr-failover--runbook) section below).
 
 ```text
 Primary:   East US 2  (read-write, HA on)
@@ -58,7 +58,9 @@ The same replica mechanism supports two distinct deployment shapes — pick the 
 | **Different region** from primary | DR + read scale-out for users in another geography | ✅ Survives a regional outage | ✅ Region-local reads near distant users |
 | **Same region** as primary | Pure read scale-out (e.g. heavy analytics or reporting workload offload) | ❌ Both clusters share regional fate | ✅ Same-zone or cross-zone reads inside one region |
 
-Same-region replicas use the identical control-plane flow (`createMode: 'GeoReplica'`, `replicaParameters` pointing at the source), with the replica `location` set equal to the primary's. They are **not** a DR strategy on their own — combine with a true cross-region replica if you need both regional DR and same-region read offload.
+Same-region replicas use the identical control-plane flow (`createMode: 'GeoReplica'`, `replicaParameters` pointing at the source), with the replica `location` set equal to the primary's. They are **not** a DR strategy on their own.
+
+> ⚠️ **One replica per primary.** Azure DocumentDB allows **only one replica cluster per primary**. Picking a same-region replica means you cannot also have a cross-region DR replica — it's a trade-off, not an addition. If you need both regional DR and same-region read offload, pick the cross-region replica and offload analytics to it (accepting cross-region read latency), or design the primary cluster to absorb the read load.
 
 ### Region selection
 

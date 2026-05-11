@@ -42,7 +42,7 @@ How HA and cross-region replicas protect different failure modes:
 | Need 99.995 % SLA | Enable HA **and** create a cross-region replica |
 | Automatic failover from node/zone failure | Enable HA |
 | Cross-region disaster recovery | Create a replica cluster |
-| Read scale-out within a single region (analytics / reporting offload) | Create a **same-region** replica (no DR benefit) |
+| Read scale-out within a single region (analytics / reporting offload) | Create a **same-region** replica (no DR benefit; you can have only one replica per primary, so this trades cross-region DR for in-region read offload) |
 | Read scale-out across regions | Create a replica cluster |
 | Availability-zone placement required | Enable HA (HA is required for AZ support) |
 | Non-production / dev-test cluster | Disable HA to reduce cost |
