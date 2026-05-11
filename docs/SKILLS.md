@@ -24,7 +24,7 @@ why it matters → incorrect example → correct example → references.
 | [`driver/`](../skills/driver/) | `driver-` | MongoDB driver/SDK usage (singleton client, pooling) |
 | [`vector-search/`](../skills/vector-search/) | `vector-` | `cosmosSearch` with DiskANN / HNSW / IVF, PQ, fp16 |
 | [`full-text-search/`](../skills/full-text-search/) | `fts-` | `createSearchIndexes` + `$search` for BM25 keyword / phrase / fuzzy; custom analyzers (keyword + edgeGram) for prefix matching on IDs; `pathHierarchy` for hierarchical identifiers; multi-field search indexes; hybrid (BM25 + vector) with RRF |
-| [`high-availability/`](../skills/high-availability/) | `ha-` | Enabling HA, cross-region replica, documented SLAs |
+| [`high-availability/`](../skills/high-availability/) | `ha-` | Enabling HA + zone redundancy, cross-region replica, automatic backup retention, documented SLAs |
 | [`security/`](../skills/security/) | `security-` | TLS, Private Endpoint, Microsoft Entra RBAC, CMK |
 | [`monitoring/`](../skills/monitoring/) | `monitoring-` | Slow query logs, metrics & alerts |
 | [`local-deployment/`](../skills/local-deployment/) | `local-` | Docker image choice, Compose, TLS, env-driven config, dev/prod parity |

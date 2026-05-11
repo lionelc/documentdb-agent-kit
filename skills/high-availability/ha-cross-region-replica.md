@@ -6,7 +6,12 @@
 
 Azure DocumentDB supports **active-passive cross-region replication**: one cluster is the read-write primary, a replica cluster in another region stays read-only and in sync. If a region fails, the replica can be promoted to take writes with minimal interruption. Combined with in-region HA, this delivers the **99.995% SLA** and enables:
 - Disaster recovery across regions.
-- Read-scale offload to the replica for heavy analytical reads.
+- Read-scale offload to the replica for heavy analytical reads or for region-local reads close to distant users.
+
+Two things to internalize before designing for cross-region:
+
+- **Replication is asynchronous.** Replica reads are eventually consistent — writes acknowledged on the primary may not yet be visible on the replica. Applications that need read-your-own-writes must route those reads to the primary.
+- **Failover is *not* automatic across regions.** Per the Azure shared-responsibility model, you (the customer) own the DR plan. Region failover requires a **customer-triggered promotion** of the replica. In-region HA failover is automatic; cross-region promotion is not.
 
 ## Incorrect
 
@@ -14,8 +19,9 @@ Relying solely on in-region HA for a mission-critical global application:
 
 ```text
 Single-region cluster, HA: on
-- Survives node failure (good)
+- Survives node and zone failures (good)
 - Does NOT survive regional outage
+- No automatic cross-region failover
 - No read-scale offload for distant users
 ```
 
@@ -25,8 +31,9 @@ Pair HA + cross-region replica for production-critical workloads:
 
 1. Enable HA on the primary cluster (see `ha-enable-for-production`).
 2. Create a replica cluster (`createMode: 'GeoReplica'`) in a paired or geographically near region. The replica reuses the primary's admin credentials, databases, collections, and documents — only the cluster name and region differ.
-3. Route latency-sensitive reads in that region to the replica's connection string (read-only).
-4. Document a tested promotion runbook for DR; validate periodically.
+3. Enable HA on the replica too — required for the combined 99.995 % SLA and for AZ placement after promotion.
+4. Route latency-sensitive reads in that region to the replica's connection string (read-only).
+5. Document and **periodically test** a promotion runbook for DR.
 
 ```text
 Primary:   East US 2  (read-write, HA on)
@@ -35,6 +42,26 @@ Combined SLA: 99.995%
 ```
 
 Design for eventual consistency on the replica; writes must still target the primary until you explicitly promote the replica.
+
+### Region selection
+
+Pick the replica region with three trade-offs in mind:
+
+| Factor | Guidance |
+|---|---|
+| **Network latency from primary to replica** | Closer regions = lower replication lag. Prefer geographically near regions when reads from the replica must be near-fresh. |
+| **Write-path latency on the primary** | Asynchronous replication does not block writes, but cross-region traffic still costs egress and adds operational risk. Don't over-replicate "just in case." |
+| **DR isolation** | The replica must be in a **different region** from the primary to survive a regional outage. For paired-region semantics, prefer an Azure region pair. |
+| **Read-locality** | If the goal is read scale-out for users in a specific geography, pick the region nearest those users — not the one nearest the primary. |
+
+### Read scale-out routing
+
+Use two connection strings in the application:
+
+- **Writes & strongly-consistent reads** → primary cluster connection string (use the **Global read-write** hostname `<cluster>.global.mongocluster.cosmos.azure.com` so it auto-follows promotion).
+- **Region-local / analytical reads** → replica's read-only connection string.
+
+This is the only way to offload reads; there is no implicit read-routing in the driver. Document which queries are safe to route to the replica and which require the primary.
 
 ### Bicep — replica cluster
 
@@ -114,6 +141,7 @@ Promotion is a control-plane action (REST / portal); there is no IaC primitive f
 ## References
 
 - [HA & cross-region replication best practices](https://learn.microsoft.com/azure/documentdb/high-availability-replication-best-practices)
+- [Reliability in Azure DocumentDB](https://learn.microsoft.com/azure/reliability/reliability-documentdb) — shared-responsibility DR model, manual cross-region promotion
 - [Cross-region replication](https://learn.microsoft.com/azure/documentdb/cross-region-replication)
 - [Manage cluster replication](https://learn.microsoft.com/azure/documentdb/how-to-cluster-replica)
 - [`MongoClusterReplicaParameters` (ARM/Bicep)](https://learn.microsoft.com/azure/templates/microsoft.documentdb/mongoclusters#mongoclusterreplicaparameters)
