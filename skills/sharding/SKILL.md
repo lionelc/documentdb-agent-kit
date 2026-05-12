@@ -21,7 +21,7 @@ The decisions that *you* own:
 - [sharding-logical-vs-physical](sharding-logical-vs-physical.md) — Mental model: logical shards are unbounded in count and size; physical shards are bounded by the cluster's compute/storage budget. Multiple logical shards map to one physical shard, never the reverse. Cross-shard transactions are supported but not free.
 - [sharding-scaling-out-vs-up](sharding-scaling-out-vs-up.md) — Scale up (bigger tier / storage SKU) grows per-shard capacity without rebalancing; scale out (more physical shards) rebalances logical shards across the new layout. Read-heavy benefits from a bigger tier; write-heavy benefits from more shards or a bigger storage SKU.
 - [sharding-hot-partition-diagnosis](sharding-hot-partition-diagnosis.md) — Symptoms (uneven CPU / IOPS / storage across shards) and remediation: reshard, change the key, or add a secondary high-cardinality field.
-- [sharding-how-to-commands](sharding-how-to-commands.md) — `sh.shardCollection` / `db.adminCommand("shardCollection")`, `sh.reshardCollection`, and the requirement to create an explicit index on the shard key (with `enableLargeIndexKeys: true`).
+- [sharding-how-to-commands](sharding-how-to-commands.md) — `sh.shardCollection` / `db.adminCommand({ shardCollection: "db.collection", key: {...} })`, `sh.reshardCollection`, and the requirement to create an explicit index on the shard key (with `enableLargeIndexKeys: true`).
 - [sharding-logical-shard-size-budget](sharding-logical-shard-size-budget.md) — Keep individual logical shards **below 4 TB** for best performance, even though the service imposes no hard cap.
 
 ## Quick decision flow

@@ -32,8 +32,8 @@ Tradeoff: queries that filter by `eventType` instead of `eventId` will scatter-g
 
 | Anti-pattern | Why it hurts |
 |---|---|
-| **Monotonically increasing values** (auto-increment IDs, `_id` as `ObjectId`, timestamps) | All new writes hash to the same physical shard at any moment — single-shard write hotspot. Even with hashed sharding, the *temporal* pattern of access focuses on the most recent shard for reads. |
-| **Timestamps** (`createdAt`, `eventTime`) | Same problem — recent reads and writes cluster on whatever shard owns "now." |
+| **Monotonically increasing values** (auto-increment IDs, `_id` as `ObjectId`, timestamps) | With **ranged** sharding, all new writes target the shard owning the highest range — single-shard write hotspot. With **hashed** sharding (the DocumentDB default — see [`indexing/index-hashed-shard-keys`](../indexing/index-hashed-shard-keys.md)) writes distribute evenly, but **reads** still cluster temporally on whatever shard owns "recent" data, so range / time-window queries scatter-gather and dashboards on "last hour" hit one shard. |
+| **Timestamps** (`createdAt`, `eventTime`) | Same problem as any monotonic key — even with hashed sharding, range queries on the timestamp scatter-gather and recent-data reads concentrate on a small subset of shards. |
 | **Low-cardinality enum** (`status`, `type`, `region` with 3 values) | Only as many distinct hash buckets as there are values; data distributes onto at most that many physical shards. |
 | **Skewed high-cardinality** (`tenantId` with 80 % of traffic on one tenant) | High cardinality on paper, but the **distribution** is what matters. One tenant's shard becomes a hot partition. |
 | **Fields that are sometimes missing** | Documents without the shard-key field can't be sharded — sharding requires the key on every document. |
@@ -91,7 +91,7 @@ If writes dominate **or** queries are diverse with no clear most-common filter, 
 For each candidate field:
 
 ```javascript
-db.employees.aggregate([
+db.employee.aggregate([
   { $group: { _id: "$candidateKey", count: { $sum: 1 } } },
   { $sort: { count: -1 } },
   { $limit: 20 }

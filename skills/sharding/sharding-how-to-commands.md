@@ -47,7 +47,7 @@ db.adminCommand({
 
 **Notes**:
 
-- `"hashed"` is the right value for the vast majority of shard keys — it ensures even hash-range distribution. Range-style shard keys are not the standard pattern for DocumentDB and are not covered here.
+- `"hashed"` is the recommended default — it distributes data evenly across the hash range and avoids write hot-spotting on monotonic keys. **Ranged** shard keys (`{ field: 1 }`) preserve locality for range and sort queries on the shard-key field; consider them only when range/time-window queries on the shard key dominate the workload *and* the field is not monotonically increasing. See [`indexing/index-hashed-shard-keys`](../indexing/index-hashed-shard-keys.md) for the hashed-vs-ranged tradeoff matrix.
 - The fully-qualified `database.collection` name is required.
 - The collection can be empty or populated. If populated, the operation rewrites placement — expect a data-movement window proportional to collection size.
 
