@@ -411,10 +411,26 @@ function Uninstall-SkillsForClient([string]$client) {
 function Get-EnvJsonHashtable([string]$conn, [string]$profileName) {
     $profiles = [ordered]@{ $profileName = [ordered]@{ authMode = "connectionString"; uri = $conn } }
     $profilesJson = ($profiles | ConvertTo-Json -Compress -Depth 10)
+    # AUTH_REQUIRED gates ONLY the Entra-JWT bearer-token check on the MCP
+    # server's HTTP/SSE transport (i.e., calls FROM the MCP client TO this
+    # server). It is fully independent of MongoDB cluster auth: SCRAM
+    # username/password from the URI and Entra-to-cluster tokens (when a
+    # profile uses authMode=entra) flow through CONNECTION_PROFILES and stay
+    # active regardless of this setting.
+    #
+    # The server defaults AUTH_REQUIRED=true and fails startup unless
+    # ENTRA_TENANT_ID / ENTRA_AUDIENCE are set. For local stdio we set
+    # AUTH_REQUIRED=false and ALLOW_UNAUTHENTICATED_STDIO=true (the server's
+    # intended dev path). This is SAFE ONLY because TRANSPORT=stdio means the
+    # MCP server is a subprocess on the user's trusted local machine — no
+    # network listener is opened. If you ever switch TRANSPORT to
+    # streamable-http or sse, set AUTH_REQUIRED=true and provide the Entra
+    # tenant/audience, or the /mcp endpoint will be exposed unauthenticated.
     return [ordered]@{
-        TRANSPORT                  = "stdio"
+        TRANSPORT                   = "stdio"
+        AUTH_REQUIRED               = "false"
         ALLOW_UNAUTHENTICATED_STDIO = "true"
-        CONNECTION_PROFILES        = $profilesJson
+        CONNECTION_PROFILES         = $profilesJson
     }
 }
 

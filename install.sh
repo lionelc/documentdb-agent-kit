@@ -444,8 +444,24 @@ build_env_json() {
 import json, sys
 conn, profile = sys.argv[1], sys.argv[2]
 profiles = {profile: {"authMode": "connectionString", "uri": conn}}
+# AUTH_REQUIRED gates ONLY the Entra-JWT bearer-token check on the MCP
+# server's HTTP/SSE transport (i.e., calls FROM the MCP client TO this
+# server). It is fully independent of MongoDB cluster auth: SCRAM
+# username/password from the URI and Entra-to-cluster tokens (when a
+# profile uses authMode=entra) flow through CONNECTION_PROFILES and stay
+# active regardless of this setting.
+#
+# The server defaults AUTH_REQUIRED=true and fails startup unless
+# ENTRA_TENANT_ID / ENTRA_AUDIENCE are set. For local stdio we set
+# AUTH_REQUIRED=false and ALLOW_UNAUTHENTICATED_STDIO=true (the server's
+# intended dev path). This is SAFE ONLY because TRANSPORT=stdio means the
+# MCP server is a subprocess on the user's trusted local machine — no
+# network listener is opened. If you ever switch TRANSPORT to
+# streamable-http or sse, set AUTH_REQUIRED=true and provide the Entra
+# tenant/audience, or the /mcp endpoint will be exposed unauthenticated.
 env = {
     "TRANSPORT": "stdio",
+    "AUTH_REQUIRED": "false",
     "ALLOW_UNAUTHENTICATED_STDIO": "true",
     "CONNECTION_PROFILES": json.dumps(profiles),
 }
@@ -455,6 +471,7 @@ PYEOF
     jq -n --arg conn "$conn" --arg profile "$profile" '
       {
         TRANSPORT: "stdio",
+        AUTH_REQUIRED: "false",
         ALLOW_UNAUTHENTICATED_STDIO: "true",
         CONNECTION_PROFILES: ({($profile): {authMode: "connectionString", uri: $conn}} | tostring)
       }'

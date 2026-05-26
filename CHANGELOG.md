@@ -30,9 +30,15 @@ What landed:
   set `DOCUMENTDB_URI` in a shell profile, which is **not** how the current
   upstream MCP server is configured. Rewrote around the actual upstream
   contract: per-client MCP config file with `CONNECTION_PROFILES` JSON,
-  `TRANSPORT=stdio`, and `ALLOW_UNAUTHENTICATED_STDIO=true`. Added per-client
-  config-file table for Claude Code / Desktop / Cursor / Copilot CLI / Gemini
-  CLI / VS Code. Updated AGENTS.md's mcp-setup row accordingly.
+  `TRANSPORT=stdio`, `AUTH_REQUIRED=false`, and
+  `ALLOW_UNAUTHENTICATED_STDIO=true`. Added per-client config-file table for
+  Claude Code / Desktop / Cursor / Copilot CLI / Gemini CLI / VS Code.
+  Updated AGENTS.md's mcp-setup row accordingly. Documented that
+  `AUTH_REQUIRED` gates only the Entra-JWT bearer check on the MCP server's
+  HTTP/SSE transport and is independent of MongoDB cluster auth (SCRAM /
+  `authMode=entra`), TLS, and capability gates — `AUTH_REQUIRED=false` is
+  safe only with `TRANSPORT=stdio`, and the same caveat is captured in the
+  installer comments.
 
 Verified end-to-end (Bash + PowerShell) in sandboxed `$HOME` against fake
 client configs: existing MCP servers preserved, single- and multi-element

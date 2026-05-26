@@ -41,8 +41,8 @@ Setup is per-client. For each client the user has installed:
 1. Make sure Node.js 20+ is available (the MCP server runs on Node).
 2. Find that client's MCP config file.
 3. Add a `DocumentDB` server entry that launches the upstream MCP server and
-   passes `CONNECTION_PROFILES` (and `TRANSPORT=stdio` + `ALLOW_UNAUTHENTICATED_STDIO=true`
-   for local stdio use).
+   passes `CONNECTION_PROFILES` (and `TRANSPORT=stdio` + `AUTH_REQUIRED=false`
+   + `ALLOW_UNAUTHENTICATED_STDIO=true` for local stdio use).
 4. Restart the client.
 
 ## Step 1: Confirm prerequisites
@@ -74,8 +74,25 @@ with database user credentials. TLS is required (`tls=true` must be present).
   where you have a separate, long-running server with Entra-authenticated
   bearer tokens. Not covered here; see the upstream README.
 
-For stdio, `ALLOW_UNAUTHENTICATED_STDIO=true` is required (stdio runs on the
-user's trusted local machine and bypasses Entra auth).
+For stdio, set `AUTH_REQUIRED=false` and `ALLOW_UNAUTHENTICATED_STDIO=true`.
+The server defaults `AUTH_REQUIRED=true` and **exits at startup** unless
+`ENTRA_TENANT_ID` / `ENTRA_AUDIENCE` are set, even for stdio.
+
+**`AUTH_REQUIRED=false` does not weaken your cluster's auth.** It gates only
+the Entra-JWT bearer-token check on the MCP server's HTTP/SSE transport —
+i.e., calls from the MCP client to this server. It is fully independent
+from how the MCP server talks to your DocumentDB cluster: SCRAM
+username/password (from the connection-string URI) and Entra-to-cluster
+tokens (`authMode: "entra"`) flow through `CONNECTION_PROFILES` and stay
+active regardless of `AUTH_REQUIRED`. TLS to the cluster (`tls=true`),
+capability gates (`ENABLE_*_TOOLS`), and tool-tier authorization are also
+unaffected.
+
+This setup is safe **only because `TRANSPORT=stdio`**: the MCP server runs
+as a subprocess of the trusted local client — no network listener is
+opened. If you ever switch `TRANSPORT` to `streamable-http` or `sse`, set
+`AUTH_REQUIRED=true` and provide the Entra tenant/audience, or the `/mcp`
+endpoint will be exposed unauthenticated.
 
 ## Step 4: Write the MCP config
 
@@ -91,6 +108,7 @@ config file and the top-level key (`mcpServers` vs `mcp.servers`) differ.
     "args": ["-y", "github:microsoft/documentdb-mcp"],
     "env": {
       "TRANSPORT": "stdio",
+      "AUTH_REQUIRED": "false",
       "ALLOW_UNAUTHENTICATED_STDIO": "true",
       "CONNECTION_PROFILES": "{\"default\":{\"authMode\":\"connectionString\",\"uri\":\"<CONN_STRING>\"}}"
     }
@@ -150,6 +168,13 @@ existing `mcpServers` object — don't overwrite the whole file.
   pointing `command` → `node`, `args` → `["<abs-path>/dist/main.js"]`.
 - **`unauthenticated stdio is disabled`**: you forgot
   `ALLOW_UNAUTHENTICATED_STDIO: "true"` in `env`.
+- **`AUTH_REQUIRED is true but ...` / server exits immediately on launch**:
+  add `"AUTH_REQUIRED": "false"` to `env`. The server defaults this to `true`
+  and refuses to start without Entra tenant/audience config. This flag gates
+  only the Entra-JWT bearer check on the MCP server's HTTP/SSE transport
+  — it does **not** disable MongoDB-level auth (SCRAM or `authMode=entra`),
+  TLS, or capability gates. Only set it to `false` together with
+  `TRANSPORT=stdio`.
 - **`connection_profile "default" not found`**: the agent is passing a
   different profile name than what's defined in `CONNECTION_PROFILES`. Either
   rename your profile or tell the agent which name to use.
