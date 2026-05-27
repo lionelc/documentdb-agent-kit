@@ -1,5 +1,29 @@
 # Changelog
 
+## 2026-05-27 — Track upstream rename: `ALLOW_UNAUTHENTICATED_STDIO` → `TRUST_LOCAL_STDIO`
+
+Upstream [microsoft/documentdb-mcp#83](https://github.com/microsoft/documentdb-mcp/pull/83)
+renamed `ALLOW_UNAUTHENTICATED_STDIO` to `TRUST_LOCAL_STDIO`. The old name is
+no longer recognized — server builds at `main` silently ignore it. The kit's
+installer kept working only because it also sets `AUTH_REQUIRED=false`, which
+short-circuits the Entra startup-validator before `TRUST_LOCAL_STDIO` is ever
+consulted. Renamed everywhere so future readers don't see a dead env var:
+
+- `install.sh` — `build_env_json()` (both python and jq paths)
+- `install.ps1` — `Get-EnvJsonHashtable()`
+- `mcp.json`
+- `skills/mcp-setup/SKILL.md` — Step 3, config template, troubleshooting
+- `README.md` — troubleshooting table
+
+Also fixed a small but real correctness issue in the upstream-installed
+"Install in VS Code" badge: it sets `TRUST_LOCAL_STDIO=true` and `TRANSPORT=stdio`
+but omits `AUTH_REQUIRED=false`. Because the server's `validateConfig` runs
+before the transport switch and demands `ENTRA_TENANT_ID` / `ENTRA_AUDIENCE`
+whenever `AUTH_REQUIRED=true` (the default), the install-button config exits
+at startup with "AUTH_REQUIRED=true requires ENTRA_TENANT_ID to be set." A
+separate PR upstream fixes both the validator (skip the Entra check when
+`TRANSPORT=stdio` and `TRUST_LOCAL_STDIO=true`) and the badge URL.
+
 ## 2026-05-21 — Cross-client installer: skills + DocumentDB MCP server in one command
 
 Replaced the non-functional `npx skills add Azure/documentdb-agent-kit`
@@ -31,7 +55,10 @@ What landed:
   upstream MCP server is configured. Rewrote around the actual upstream
   contract: per-client MCP config file with `CONNECTION_PROFILES` JSON,
   `TRANSPORT=stdio`, `AUTH_REQUIRED=false`, and
-  `ALLOW_UNAUTHENTICATED_STDIO=true`. Added per-client config-file table for
+  `ALLOW_UNAUTHENTICATED_STDIO=true` (later renamed `TRUST_LOCAL_STDIO` in
+  [microsoft/documentdb-mcp#83](https://github.com/microsoft/documentdb-mcp/pull/83);
+  this kit was updated to emit the new name in the 2026-05-27 entry below).
+  Added per-client config-file table for
   Claude Code / Desktop / Cursor / Copilot CLI / Gemini CLI / VS Code.
   Updated AGENTS.md's mcp-setup row accordingly. Documented that
   `AUTH_REQUIRED` gates only the Entra-JWT bearer check on the MCP server's

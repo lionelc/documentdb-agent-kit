@@ -68,7 +68,7 @@ Setup is per-client. For each client the user has installed:
 2. Find that client's MCP config file.
 3. Add a `DocumentDB` server entry that launches the upstream MCP server and
    passes `CONNECTION_PROFILES` (and `TRANSPORT=stdio` + `AUTH_REQUIRED=false`
-   + `ALLOW_UNAUTHENTICATED_STDIO=true` for local stdio use).
+   + `TRUST_LOCAL_STDIO=true` for local stdio use).
 4. Restart the client.
 
 ## Step 1: Confirm prerequisites
@@ -100,9 +100,12 @@ with database user credentials. TLS is required (`tls=true` must be present).
   where you have a separate, long-running server with Entra-authenticated
   bearer tokens. Not covered here; see the upstream README.
 
-For stdio, set `AUTH_REQUIRED=false` and `ALLOW_UNAUTHENTICATED_STDIO=true`.
+For stdio, set `AUTH_REQUIRED=false` and `TRUST_LOCAL_STDIO=true`.
 The server defaults `AUTH_REQUIRED=true` and **exits at startup** unless
 `ENTRA_TENANT_ID` / `ENTRA_AUDIENCE` are set, even for stdio.
+(`TRUST_LOCAL_STDIO` was named `ALLOW_UNAUTHENTICATED_STDIO` before
+[microsoft/documentdb-mcp#83](https://github.com/microsoft/documentdb-mcp/pull/83)
+— if you're on an older server build, use that name instead.)
 
 **`AUTH_REQUIRED=false` does not weaken your cluster's auth.** It gates only
 the Entra-JWT bearer-token check on the MCP server's HTTP/SSE transport —
@@ -135,7 +138,7 @@ config file and the top-level key (`mcpServers` vs `mcp.servers`) differ.
     "env": {
       "TRANSPORT": "stdio",
       "AUTH_REQUIRED": "false",
-      "ALLOW_UNAUTHENTICATED_STDIO": "true",
+      "TRUST_LOCAL_STDIO": "true",
       "CONNECTION_PROFILES": "{\"default\":{\"authMode\":\"connectionString\",\"uri\":\"<CONN_STRING>\"}}"
     }
   }
@@ -192,8 +195,9 @@ existing `mcpServers` object — don't overwrite the whole file.
   https://github.com/microsoft/documentdb-mcp.git`; if it fails, fall back to
   cloning the repo manually, running `npm install && npm run build`, and
   pointing `command` → `node`, `args` → `["<abs-path>/dist/main.js"]`.
-- **`unauthenticated stdio is disabled`**: you forgot
-  `ALLOW_UNAUTHENTICATED_STDIO: "true"` in `env`.
+- **`stdio transport is disabled when AUTH_REQUIRED=true` / `unauthenticated stdio is disabled`**:
+  you forgot `TRUST_LOCAL_STDIO: "true"` in `env` (or, on older builds before
+  microsoft/documentdb-mcp#83, `ALLOW_UNAUTHENTICATED_STDIO: "true"`).
 - **`AUTH_REQUIRED is true but ...` / server exits immediately on launch**:
   add `"AUTH_REQUIRED": "false"` to `env`. The server defaults this to `true`
   and refuses to start without Entra tenant/audience config. This flag gates

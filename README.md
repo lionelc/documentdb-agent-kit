@@ -241,7 +241,7 @@ non-kit skills are left untouched.
 | `npm: not found` but Node.js is installed | Linux (Debian/Ubuntu) | The distro `nodejs` package sometimes omits npm — `sudo apt install -y npm`, or use nvm. |
 | `symlink failed for <skill>; copying instead` warnings | Windows | Harmless. Enable Developer Mode if you want real symlinks. |
 | Agent: `connection_profile "default" not found` | all | Tell the agent to use profile `default` explicitly, or pass `--profile <name>` / `-Profile <name>` to the installer. |
-| Agent: `AUTH_REQUIRED is true ...` or server exits at launch | all | Re-run the installer — it sets `AUTH_REQUIRED=false` + `ALLOW_UNAUTHENTICATED_STDIO=true`, required for local stdio. This only disables the MCP-server's Entra-JWT *transport* gate; your cluster's SCRAM/Entra auth is unaffected. |
+| Agent: `AUTH_REQUIRED is true ...` or server exits at launch | all | Re-run the installer — it sets `AUTH_REQUIRED=false` + `TRUST_LOCAL_STDIO=true`, required for local stdio. This only disables the MCP-server's Entra-JWT *transport* gate; your cluster's SCRAM/Entra auth is unaffected. |
 | TLS error against Azure | all | Confirm `tls=true` is in the URI and the password is URL-encoded. |
 | Connection timeout to Azure | all | Azure portal → cluster → *Networking* → add your client IP to the firewall allowlist. |
 | `Permission denied` writing into `~/.claude.json` | Linux / macOS | Don't `sudo` the installer — it writes user-scoped configs. Run as your normal user. |
