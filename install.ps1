@@ -335,15 +335,30 @@ function Sync-Repo([string]$Repo, [string]$Dest, [string]$Ref) {
     }
 }
 
+function Invoke-Npm {
+    param([string[]]$NpmArgs)
+    if ($IsWin) {
+        # On Windows, npm is npm.cmd (a batch shim). PowerShell's `&` call
+        # operator can mangle arguments when piping them into .cmd files
+        # (notably under PSNativeCommandArgumentPassing defaults on pwsh 7.3+),
+        # which manifests as e.g. `Unknown command: "pm"` because the first
+        # char of "install" is eaten. Route through cmd.exe to bypass entirely.
+        $line = "npm " + ($NpmArgs -join ' ')
+        cmd /c $line
+    } else {
+        & npm @NpmArgs
+    }
+}
+
 function Build-McpServer {
     if ($DryRun) { Write-Dry "(cd $MCP_DIR; npm install; npm run build)"; return }
     Write-Info "installing MCP server dependencies (this may take a minute)"
     Push-Location $MCP_DIR
     try {
-        & npm install --silent --no-audit --no-fund --no-progress
+        Invoke-Npm @("install", "--silent", "--no-audit", "--no-fund", "--no-progress")
         if ($LASTEXITCODE -ne 0) { Write-Err "npm install failed in $MCP_DIR"; exit 1 }
         Write-Info "building MCP server"
-        & npm run build --silent
+        Invoke-Npm @("run", "build", "--silent")
         if ($LASTEXITCODE -ne 0) { Write-Err "npm run build failed in $MCP_DIR"; exit 1 }
     } finally { Pop-Location }
     $entry = Join-Path $MCP_DIR "dist/main.js"
