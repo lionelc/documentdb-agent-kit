@@ -39,5 +39,4 @@ Users are encouraged to:
 For more information about Microsoft's vulnerability disclosure process, see:
 
 - Microsoft Security Response Center: https://www.microsoft.com/msrc
-- Coordinated Vulnerability Disclosure: https://www.microsoft.com/msrc/cv
-d
+- Coordinated Vulnerability Disclosure: https://www.microsoft.com/msrc/cvd
