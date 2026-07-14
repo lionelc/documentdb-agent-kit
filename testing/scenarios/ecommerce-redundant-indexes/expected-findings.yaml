@@ -1,0 +1,58 @@
+# expected-findings.yaml — ecommerce-redundant-indexes
+# The fixed "answer key" for this scenario. Do NOT edit to make a failing test
+# pass — edit only when the planted fixture intentionally changes.
+#
+# The test asserts that index-redundancy-finder.sh --json:
+#   1. reports EVERY entry in must_detect (matched by collection + rule [+ index])
+#   2. NEVER reports any index in must_not_flag_structural with a structural
+#      redundancy rule (PREFIX_REDUNDANT / EXACT_DUPLICATE / REVERSE_VARIANT)
+#
+# An entry may use `rule:` (exact) or `rule_any:` (any one of a list) — the
+# latter keeps the contract stable across detector threshold tuning (e.g. an
+# unused index may be labelled UNUSED_VERIFIED or WRITE_TAX depending on write
+# volume, but EITHER proves it was correctly flagged as wasteful).
+
+database: test_ecom_redundant
+script: index-redundancy-finder.sh
+
+structural_rules:
+  - PREFIX_REDUNDANT
+  - EXACT_DUPLICATE
+  - REVERSE_VARIANT
+
+must_detect:
+  # --- structural redundancies (deterministic) ---
+  - collection: customers
+    index: tenant_id_1
+    rule: PREFIX_REDUNDANT
+  - collection: customers
+    index: email_1
+    rule: EXACT_DUPLICATE
+  - collection: orders
+    index: customer_id_1
+    rule: PREFIX_REDUNDANT
+  - collection: orders
+    index: customer_id_1_status_1
+    rule: PREFIX_REDUNDANT
+  - collection: orders
+    rule: REVERSE_VARIANT            # one side of the region asc/desc pair
+  # --- unused indexes with write cost (label may vary by threshold) ---
+  - collection: sessions
+    index: ip_address_1
+    rule_any: [UNUSED_VERIFIED, WRITE_TAX]
+  - collection: sessions
+    index: user_agent_1
+    rule_any: [UNUSED_VERIFIED, WRITE_TAX]
+
+# KEEP indexes that must never be flagged as structurally redundant.
+# (The region reverse-pair is intentionally excluded: the detector legitimately
+#  flags one side, and which side is an implementation detail.)
+must_not_flag_structural:
+  - collection: customers
+    index: tenant_id_1_status_1
+  - collection: customers
+    index: email_unique
+  - collection: orders
+    index: customer_id_1_status_1_created_at_-1
+
+min_total_findings: 7

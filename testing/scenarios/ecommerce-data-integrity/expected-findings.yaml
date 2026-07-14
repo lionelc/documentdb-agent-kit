@@ -1,0 +1,14 @@
+# expected-findings.yaml — ecommerce-data-integrity
+# Answer key for the planted HARD structural integrity violations.
+# (The checker no longer performs soft/semantic checks — duplicates, value
+#  ranges, sign, required/non-null — so this scenario only asserts on the two
+#  structural checks that remain: referential integrity and type consistency.)
+
+database: test_ecom_integrity
+script: data-integrity-check.sh
+
+min_referential_issues: 1        # orders.customer_id -> customers orphans
+
+type_inconsistency:
+  collection: signups            # signups.ref_code is number in some docs,
+  field: ref_code                # string in others

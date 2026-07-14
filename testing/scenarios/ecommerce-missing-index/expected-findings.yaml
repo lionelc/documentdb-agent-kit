@@ -1,0 +1,8 @@
+# expected-findings.yaml — ecommerce-missing-index
+# Answer key for perf-advisor.sh COLLSCAN detection on an unindexed collection.
+
+database: test_ecom_missing_index
+script: perf-advisor.sh
+
+unindexed_collection: events
+min_collscan_patterns: 1

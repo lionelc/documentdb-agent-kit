@@ -1,0 +1,169 @@
+{
+  "kb_version": "0.1.0",
+  "description": "DocumentDB Agent-Kit knowledge base. Single source of truth mapping natural-language diagnostic intents to the exact scripts that answer them (one hop), with a schema for multi-hop troubleshooting workflows (guarded diagnostic graph) to be populated later.",
+  "conventions": {
+    "db_placeholder": "<db>",
+    "run_prefix": "bash",
+    "scripts_root": "scripts/",
+    "notes": "Every tool reads a live DocumentDB container locally (mongosh + psql). Recommendations are measured facts, never generic rules-of-thumb."
+  },
+
+  "tools": [
+    {
+      "id": "index-redundancy-finder",
+      "title": "Index Redundancy Finder",
+      "script": "scripts/index-redundancy-finder.sh",
+      "invocation": "bash scripts/index-redundancy-finder.sh --db <db> [--json]",
+      "params": [{ "name": "--db", "required": true, "placeholder": "<db>" }],
+      "layer": "mongo+postgres",
+      "produces": "list of redundant/unused/prefix/duplicate indexes with severity and replacement",
+      "keywords": ["index", "indexes", "redundant", "duplicate index", "unused index", "prefix index", "write amplification", "slow writes", "too many indexes", "index bloat", "drop index", "optimize indexes", "write tax"],
+      "example_queries": [
+        "why are my writes slow",
+        "audit my indexes",
+        "do I have redundant or unused indexes",
+        "which indexes can I drop"
+      ]
+    },
+    {
+      "id": "document-bloat-advisor",
+      "title": "Large-Document / TOAST Advisor",
+      "script": "scripts/document-bloat-advisor.sh",
+      "invocation": "bash scripts/document-bloat-advisor.sh --db <db> [--json]",
+      "params": [{ "name": "--db", "required": true, "placeholder": "<db>" }],
+      "layer": "mongo+postgres",
+      "produces": "collections whose large text fields are TOASTed and detoasted on every scan, with the schema-split fix",
+      "keywords": ["large document", "big document", "toast", "detoast", "large text", "big text field", "document size", "avgobjsize", "slow scan", "slow aggregation", "bloat", "narrative", "why are reads slow", "schema split"],
+      "example_queries": [
+        "why are my aggregations slow even with indexes",
+        "are my documents too big",
+        "is large text hurting my scans",
+        "diagnose TOAST overhead"
+      ]
+    },
+    {
+      "id": "db-config-advisor",
+      "title": "Config & Cache Advisor",
+      "script": "scripts/db-config-advisor.sh",
+      "invocation": "bash scripts/db-config-advisor.sh --db <db> [--json]",
+      "params": [{ "name": "--db", "required": true, "placeholder": "<db>" }],
+      "layer": "postgres",
+      "produces": "shared_buffers vs measured working set, TOAST share, cache-hit ratios (evidence-based)",
+      "keywords": ["cache", "cache hit", "buffer", "shared_buffers", "working set", "memory", "configuration", "config", "tuning", "tune", "effective_cache_size", "resident", "eviction", "is my database configured well", "ram"],
+      "example_queries": [
+        "is my cache big enough",
+        "should I increase shared_buffers",
+        "what is my working set and cache hit ratio",
+        "is my database well configured"
+      ]
+    },
+    {
+      "id": "perf-advisor",
+      "title": "Performance Advisor",
+      "script": "scripts/perf-advisor.sh",
+      "invocation": "bash scripts/perf-advisor.sh --db <db> [--json]",
+      "params": [{ "name": "--db", "required": true, "placeholder": "<db>" }],
+      "layer": "mongo+postgres",
+      "produces": "overall health: collection/index overview, collection-scan audit, query timing, PG I/O/locks/config",
+      "keywords": ["performance", "slow", "slow query", "collection scan", "collscan", "missing index", "health", "overall", "diagnose performance", "profiling", "locks", "seq scan", "sequential scan", "general checkup"],
+      "example_queries": [
+        "give my database a performance checkup",
+        "why is my database slow",
+        "find collection scans / missing indexes",
+        "overall health check"
+      ]
+    },
+    {
+      "id": "data-integrity-check",
+      "title": "Data Integrity Checker",
+      "script": "scripts/data-integrity-check.sh",
+      "invocation": "bash scripts/data-integrity-check.sh --db <db> [--json]",
+      "params": [{ "name": "--db", "required": true, "placeholder": "<db>" }],
+      "layer": "mongo",
+      "produces": "orphaned foreign-key references and field type inconsistencies (hard structural integrity)",
+      "keywords": ["integrity", "data integrity", "orphan", "orphaned", "broken reference", "dangling reference", "foreign key", "referential", "type consistency", "mixed types", "consistency", "corrupt", "validate data"],
+      "example_queries": [
+        "check my data integrity",
+        "do I have orphaned or broken references",
+        "are there dangling foreign keys",
+        "are my field types consistent"
+      ]
+    }
+  ],
+
+  "routes_one_hop": {
+    "description": "Representative NL query -> tool id. Used for testing and as extra routing signal; the router also scores against each tool's keywords/example_queries.",
+    "examples": [
+      { "query": "my writes got slow after adding indexes", "tool": "index-redundancy-finder" },
+      { "query": "which indexes are useless", "tool": "index-redundancy-finder" },
+      { "query": "aggregations are slow but I have indexes", "tool": "document-bloat-advisor" },
+      { "query": "my documents have huge text fields", "tool": "document-bloat-advisor" },
+      { "query": "is my cache hit ratio ok", "tool": "db-config-advisor" },
+      { "query": "do I need more shared_buffers", "tool": "db-config-advisor" },
+      { "query": "run a general performance checkup", "tool": "perf-advisor" },
+      { "query": "find missing indexes and collection scans", "tool": "perf-advisor" },
+      { "query": "check for orphaned references", "tool": "data-integrity-check" },
+      { "query": "validate referential integrity", "tool": "data-integrity-check" }
+    ]
+  },
+
+  "workflow_schema": {
+    "description": "Schema for MULTI-HOP troubleshooting workflows: a guarded diagnostic graph (AND/OR). Each step runs a tool; edges are conditional on the observed result. The LLM agent presents a step, the human runs it (or the agent runs the script), and the reported result selects the next step or a conclusion. This layer is scaffolded; workflows are added over time.",
+    "fields": {
+      "id": "string",
+      "title": "string",
+      "entry": "step id to start at",
+      "steps": {
+        "<step_id>": {
+          "tool": "tool id (from tools[])",
+          "args": "optional arg hints",
+          "question": "what the step establishes",
+          "depends_on": ["step ids that must run first (AND edges)"],
+          "yields": {
+            "<observation_key>": { "next": "<step_id>", "or_conclude": "human-readable conclusion" }
+          }
+        }
+      }
+    }
+  },
+
+  "workflows": [
+    {
+      "id": "slow-writes",
+      "title": "Diagnose slow writes (SCAFFOLD — illustrative, not yet validated)",
+      "status": "scaffold",
+      "entry": "check_redundant_indexes",
+      "steps": {
+        "check_redundant_indexes": {
+          "tool": "index-redundancy-finder",
+          "args": "--db <db> --json",
+          "question": "Are redundant/unused indexes taxing every write?",
+          "yields": {
+            "findings_gt_0": { "or_conclude": "Redundant/unused indexes are a write tax; drop the flagged indexes." },
+            "findings_eq_0": { "next": "check_document_bloat" }
+          }
+        },
+        "check_document_bloat": {
+          "tool": "document-bloat-advisor",
+          "args": "--db <db> --json",
+          "question": "Are large co-located text fields making each write rewrite TOAST?",
+          "depends_on": ["check_redundant_indexes"],
+          "yields": {
+            "bloat_found": { "or_conclude": "Large co-located text inflates write/TOAST cost; split text into a side collection." },
+            "no_bloat": { "next": "check_config" }
+          }
+        },
+        "check_config": {
+          "tool": "db-config-advisor",
+          "args": "--db <db>",
+          "question": "Is the working set exceeding cache, causing write-path I/O?",
+          "depends_on": ["check_document_bloat"],
+          "yields": {
+            "working_set_over_cache": { "or_conclude": "Working set exceeds shared_buffers; shrink documents or size cache to the measured working set." },
+            "fits": { "or_conclude": "No index/bloat/cache cause found at this layer; escalate to workload/lock analysis." }
+          }
+        }
+      }
+    }
+  ]
+}

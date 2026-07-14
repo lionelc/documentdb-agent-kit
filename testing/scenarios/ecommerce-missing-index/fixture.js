@@ -1,0 +1,44 @@
+// fixture.js — ecommerce-missing-index
+// Seeds a collection that is queried on an UNINDEXED field so perf-advisor.sh
+// flags a COLLSCAN. A second, properly-indexed collection is included so the
+// scenario also proves perf-advisor does NOT flag well-indexed access.
+//
+// Planted issue (answer key — see expected-findings.yaml):
+//   events.event_type / events.device_id : no supporting index -> COLLSCAN
+
+["events", "products"].forEach(function (c) {
+    try { db[c].drop(); } catch (e) {}
+});
+
+// ---- events: NO secondary indexes -> queries on these fields must COLLSCAN ----
+var bulk = [];
+for (var i = 1; i <= 2000; i++) {
+    bulk.push({
+        event_id: i,
+        device_id: "dev-" + (i % 200),
+        event_type: ["click", "view", "purchase", "error"][i % 4],
+        ts: new Date(2024, (i % 12), (i % 28) + 1)
+    });
+}
+db.events.insertMany(bulk);
+// (intentionally NO createIndex on events)
+
+// ---- products: properly indexed (control) ----
+bulk = [];
+for (var i = 1; i <= 500; i++) {
+    bulk.push({
+        sku: "SKU-" + i,
+        category: ["a", "b", "c"][i % 3],
+        price: (i % 100) + 1
+    });
+}
+db.products.insertMany(bulk);
+db.products.createIndex({ sku: 1 });
+db.products.createIndex({ category: 1 });
+db.products.createIndex({ price: 1 });
+
+print("FIXTURE_READY missing-index");
+print("  events: " + db.events.countDocuments() + " docs, "
+      + db.events.getIndexes().length + " indexes");
+print("  products: " + db.products.countDocuments() + " docs, "
+      + db.products.getIndexes().length + " indexes");

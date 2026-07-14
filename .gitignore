@@ -7,3 +7,11 @@ build/
 *.log
 .vscode/
 .idea/
+
+# Regression test framework
+testing-venv/
+__pycache__/
+.pytest_cache/
+
+# Generated benchmark output (regenerate via scenarios/contoso/scaling-benchmark/)
+scenarios/contoso/scaling-benchmark/results.tsv

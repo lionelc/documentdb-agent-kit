@@ -1,0 +1,23 @@
+# expected-findings.yaml — json-contract
+#
+# Declares the --json OUTPUT CONTRACT for every diagnostic script (shape only,
+# never finding counts). `type` is the top-level JSON type (list|object); `keys`
+# are required top-level keys for object payloads. The test maps type->Python
+# type and also asserts the nested shape of perf-advisor and data-integrity-check.
+
+database: test_json_contract
+
+shape:
+  document-bloat-advisor.sh:
+    type: list
+  index-redundancy-finder.sh:
+    type: list
+  db-config-advisor.sh:
+    type: object
+    keys: [db, shared_buffers_bytes, working_set_bytes, cache_hit_heap]
+  perf-advisor.sh:
+    type: object
+    keys: [databases, mongo, pg]
+  data-integrity-check.sh:
+    type: object
+    keys: [db, referential_integrity, type_consistency, total_issues, ok]

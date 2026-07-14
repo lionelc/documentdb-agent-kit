@@ -1,0 +1,47 @@
+# expected-findings.yaml — kb-router
+#
+# Routing contract for the knowledge-base router. Data-driven so new intents can
+# be guarded by adding a row here. `tool` is the tool id in knowledge-base/kb.json
+# the query must resolve to.
+
+routes:
+  - query: "why are my aggregations slow even though I have indexes"
+    tool: document-bloat-advisor
+  - query: "are my documents too big / is large text hurting my scans"
+    tool: document-bloat-advisor
+  - query: "diagnose TOAST detoast overhead"
+    tool: document-bloat-advisor
+  - query: "reads are slow because each document has a huge narrative text field"
+    tool: document-bloat-advisor
+  - query: "which indexes can I drop"
+    tool: index-redundancy-finder
+  - query: "my writes got slow after adding indexes"
+    tool: index-redundancy-finder
+  - query: "do I have duplicate or unused indexes I can drop"
+    tool: index-redundancy-finder
+  - query: "is my cache big enough, should I increase shared_buffers"
+    tool: db-config-advisor
+  - query: "what is my cache hit ratio and working set size"
+    tool: db-config-advisor
+  - query: "check for orphaned or broken references"
+    tool: data-integrity-check
+  - query: "validate referential integrity and check for mixed field types"
+    tool: data-integrity-check
+  - query: "run a general performance checkup"
+    tool: perf-advisor
+  - query: "find missing indexes and sequential scans"
+    tool: perf-advisor
+
+# Confident routes must clear this score (router sets "confident" at >= 2.0).
+min_confident_score: 2.0
+
+# A vague query with no tool-specific signal must NOT produce a confident route —
+# the router should decline rather than guess.
+unconfident_case:
+  query: "my scans read tons of data even though the filter is simple"
+
+# A query that must match a specific MULTIWORD keyword (the +3.0 phrase rule).
+phrase_case:
+  query: "is large text hurting my scans"
+  tool: document-bloat-advisor
+  keyword: "large text"

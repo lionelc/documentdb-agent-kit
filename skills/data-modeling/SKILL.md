@@ -16,6 +16,17 @@ Each rule follows the same shape — why it matters → incorrect example → co
 - [model-16mb-limit](model-16mb-limit.md) — Stay well under the 16 MB BSON document limit; plan for steady-state growth.
 - [model-denormalize-reads](model-denormalize-reads.md) — Denormalize for read-heavy workloads; pre-compute aggregates to avoid `$lookup`.
 - [model-schema-versioning](model-schema-versioning.md) — Add a `schemaVersion` field and migrate documents lazily.
+- [model-large-field-split](model-large-field-split.md) — Split a large, low-compressibility field into a side collection keyed by `_id` to avoid the PostgreSQL TOAST detoast tax on scans. Companion tool: [`scripts/toast-split-advisor.sh`](../../scripts/toast-split-advisor.sh).
+
+## Companion tool (analysis only)
+
+[`scripts/toast-split-advisor.sh`](../../scripts/toast-split-advisor.sh) measures
+heap vs TOAST bytes on a live local container and reports **where** a large field
+should be split out — it never moves data:
+
+```bash
+bash scripts/toast-split-advisor.sh --db <name> [--json]
+```
 
 ## Decision framework
 

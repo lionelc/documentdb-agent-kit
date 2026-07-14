@@ -1,0 +1,16 @@
+# expected-findings.yaml — ecommerce-healthy-indexes (false-positive guard)
+# A healthy, well-indexed database must produce no STRUCTURAL redundancy
+# findings. allow_unused tolerates usage-based labels (UNUSED_VERIFIED /
+# WRITE_TAX) which can be sensitive to planner/stat timing, while
+# max_structural_findings = 0 strictly forbids false structural positives.
+
+database: test_ecom_healthy_indexes
+script: index-redundancy-finder.sh
+
+structural_rules:
+  - PREFIX_REDUNDANT
+  - EXACT_DUPLICATE
+  - REVERSE_VARIANT
+
+max_structural_findings: 0
+max_total_findings: 0       # ideal: a clean DB yields zero findings
