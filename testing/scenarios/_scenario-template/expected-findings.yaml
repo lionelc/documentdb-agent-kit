@@ -1,0 +1,12 @@
+# expected-findings.yaml — TEMPLATE
+# The fixed "answer key" for this scenario. Prefer minimum counts / membership
+# over brittle exact matching. Do not edit to silence a failing test.
+
+database: test_template
+script: <script>.sh
+
+# Example shape (customise to your script):
+# must_detect:
+#   - collection: widgets
+#     rule: SOME_RULE
+# min_total_findings: 1

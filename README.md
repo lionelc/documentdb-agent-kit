@@ -15,6 +15,60 @@ Skills follow the [Agent Skills](https://agentskills.io/) format and the kit shi
 
 👉 **Capabilities and skill catalog:** [`docs/SKILLS.md`](docs/SKILLS.md)
 
+## Diagnostic Toolbox — Quickstart
+
+Beyond the text skills, the kit ships **deterministic diagnostic scripts** and a
+**knowledge-base router** that inspect a *local* DocumentDB container and return
+evidence-based answers (reading both the MongoDB API and the PostgreSQL engine
+underneath). They need only `docker`, `bash`, and `python3` — no MCP server, no
+cloud, no API keys. Full guide: [`docs/DIAGNOSTICS.md`](docs/DIAGNOSTICS.md).
+
+### The tools (`scripts/`)
+
+All are **read-only** (they never modify data) and **cross-layer** (MongoDB API +
+PostgreSQL engine). Each takes `--db <name>`; add `--json` for a compact
+machine-readable result (what the router consumes).
+
+| Script | Answers | `--json` |
+|--------|---------|:--:|
+| `document-bloat-advisor.sh` | Which collections have large text TOASTed and detoasted on every scan; which field to split out. | ✅ |
+| `index-redundancy-finder.sh` | Redundant (prefix/duplicate/reverse) or unused indexes safe to drop. | ✅ |
+| `db-config-advisor.sh` | Working set vs cache, TOAST share, cache-hit ratios — evidence-based config review. | ✅ |
+| `perf-advisor.sh` | Overall health: collection-scan audit, query timing, PG I/O / locks / config. | ✅ |
+| `data-integrity-check.sh` | Orphaned foreign-key references and mixed-type fields (hard structural integrity). | ✅ |
+
+Common flags: `--container NAME`, `--password PASS`, `--port`, `--pg-port`; env
+vars `DB_USER` / `DB_PASSWORD` / `PORT` / `PG_PORT` are also honored. **No password
+is baked in** — set `DB_PASSWORD` (or pass `--password`).
+
+### Quickstart
+
+```bash
+# 0. start a local DocumentDB container (choose any password; the scripts read it)
+docker run -dt --name documentdb-local -p 10260:10260 \
+  -e USERNAME=docdbadmin -e PASSWORD=Test1234 \
+  ghcr.io/microsoft/documentdb/documentdb-local:latest
+export DB_PASSWORD=Test1234          # the scripts require this (or --password)
+
+# 1. seed demo data
+bash scenarios/ecommerce/seed.sh           # -> "ecommerce"
+bash scenarios/contoso/seed.sh             # -> "contoso" (TOAST demo)
+
+# 2. diagnose (read-only; add --json for machine output)
+bash scripts/document-bloat-advisor.sh --db contoso
+bash scripts/index-redundancy-finder.sh --db ecommerce
+
+# 3. or ask in natural language — the router picks the tool (no LLM, no container)
+bash knowledge-base/kb-route.sh --db contoso "why are my aggregations slow even though I have indexes"
+```
+
+Demo datasets are seeders under [`scenarios/`](scenarios/) (they plant the
+problems the tools find). The regression suite in [`testing/`](testing/README.md)
+guards the scripts.
+
+- **Router:** [`knowledge-base/README.md`](knowledge-base/README.md) · **Demo datasets:** [`scenarios/`](scenarios/)
+- **Regression tests:** [`testing/README.md`](testing/README.md) · **Token study:** [`token-tests/RESULTS.md`](token-tests/RESULTS.md)
+
 ## Repo Structure
 
 ```
@@ -25,6 +79,12 @@ skills/
   <skill>/               # standalone skill (mcp-setup, query-optimizer, …)
     SKILL.md             # agent-facing activation + instructions
     references/          # reference docs the skill loads at runtime
+scripts/                 # diagnostic toolbox — read-only analyzers + seeders
+knowledge-base/          # NL → script router (kb.json + kb_route.py) + demo
+scenarios/contoso/       # ready-to-run TOAST demo dataset (+ optional scaling-benchmark/)
+testing/                 # fixture-first regression suite for the scripts (pytest)
+token-tests/             # measured token savings of scripts vs text-skill workflows
+docs/                    # SKILLS.md (catalog) + DIAGNOSTICS.md (toolbox guide)
 ```
 
 ## Installation
