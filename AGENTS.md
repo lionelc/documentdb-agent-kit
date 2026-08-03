@@ -12,7 +12,31 @@ This repository is an **Agent Skills** pack for **Azure DocumentDB (with MongoDB
 
 ## How agents should use this kit
 
-### Skill routing (do this first)
+This kit has **two routes**. Decide the route *first*, from what the user said:
+
+| The user says… | Route | What the agent does |
+|---|---|---|
+| **"use toolbox"** (explicit), or clearly asks to *run the diagnostic scripts* against a live database | **Route A — Diagnostic toolbox** | Use the knowledge-base router to pick and run a **read-only** diagnostic script against the user's *local* DocumentDB container, then report the findings. |
+| **anything else** (the default) | **Route B — Text skills** | Route to the best `skills/*/SKILL.md` and answer from guidance. |
+
+**Default to Route B.** Only take Route A when the user **explicitly** says *"use toolbox"* (or unambiguously asks to run the diagnostic scripts / inspect a live local database). Do not run any script on Route B.
+
+### Route A — Diagnostic toolbox (only when the user says "use toolbox")
+
+Deterministic, **read-only** scripts that inspect a *local* DocumentDB container (both the MongoDB API and the PostgreSQL engine underneath) and emit findings. They never modify data; no cloud, no API keys. Steps:
+
+1. **Prerequisites:** a running container (default name `documentdb-local`) and a password exported as `DB_PASSWORD` (or passed via `--password`); `db-config-advisor` is PG-only and needs no password. See [`docs/DIAGNOSTICS.md`](docs/DIAGNOSTICS.md) for the one-line `docker run` and seeding.
+2. **Route the question to the exact script** with the knowledge-base router — deterministic keyword scoring, needs no LLM and no container:
+   ```bash
+   bash knowledge-base/kb-route.sh --db <db> "<the user's question>"
+   ```
+   It prints the matching tool and the exact command (append `--json` for machine-readable output). See [`knowledge-base/README.md`](knowledge-base/README.md).
+3. **Run the recommended command** (all scripts are read-only) and interpret the findings/insights for the user. Present the fix as a recommendation — applying it (e.g. a schema split or dropping an index) is the user's decision.
+4. **If the router is not confident** (no match / low score), fall back to Route B.
+
+Tools available on this route: `document-bloat-advisor`, `index-redundancy-finder`, `db-config-advisor`, `perf-advisor`, `data-integrity-check` — catalog in [`README.md`](README.md#the-tools-scripts). Regression-guarded by [`testing/`](testing/README.md).
+
+### Route B — Text skills (default): skill routing (do this first)
 
 This kit ships **17+ skills**, which is too many to reliably pick from a flat table. Agents should route in this order:
 
@@ -57,6 +81,10 @@ These skills walk the user (or another agent) through a task end-to-end.
 | `documentdb-connection` | `skills/connection/` | Pool-size / timeout / retry tuning for serverless, OLTP, OLAP, or bursty workloads |
 
 ## Routing hints for agents
+
+These map a task to the best **Route B (text) skill**. (On **Route A** — when the
+user said *"use toolbox"* — route the same task through `knowledge-base/kb-route.sh`
+to a diagnostic script instead.)
 
 - **Writing / generating a query** → `documentdb-natural-language-querying`
 - **"Why is this query slow / how do I index this?"** → `documentdb-query-optimizer`

@@ -42,6 +42,30 @@ Single-purpose skills the agent loads when its trigger description matches.
 | [`query-optimizer/`](../skills/query-optimizer/) | "Why is this query slow?", index review, `explain()`-driven tuning (indexing deep-dive lives in its `references/`) |
 | [`connection/`](../skills/connection/) | Connection pool / timeout / retry tuning; serverless vs OLTP vs OLAP patterns |
 
+## Diagnostic toolbox (scripts + router)
+
+Beyond the text skills, the kit ships **deterministic, read-only diagnostic
+scripts** that inspect a *local* DocumentDB container across both layers (MongoDB
+API + PostgreSQL engine), plus a **knowledge-base router** that maps a natural-
+language question to the exact script — no LLM at routing time. Full guide:
+[`DIAGNOSTICS.md`](DIAGNOSTICS.md); catalog: [`../README.md`](../README.md#the-tools-scripts).
+
+| Tool | Answers |
+|---|---|
+| [`document-bloat-advisor.sh`](../scripts/document-bloat-advisor.sh) | Which collections have large text TOASTed and detoasted on every scan; which field to split out. |
+| [`index-redundancy-finder.sh`](../scripts/index-redundancy-finder.sh) | Redundant (prefix/duplicate/reverse) or unused indexes safe to drop. |
+| [`db-config-advisor.sh`](../scripts/db-config-advisor.sh) | Working set vs cache, TOAST share, cache-hit ratios (evidence-based). |
+| [`perf-advisor.sh`](../scripts/perf-advisor.sh) | Overall health: collection-scan audit, query timing, PG I/O / locks / config. |
+| [`data-integrity-check.sh`](../scripts/data-integrity-check.sh) | Orphaned foreign keys + mixed-type fields (hard structural integrity). |
+| [`knowledge-base/`](../knowledge-base/README.md) | NL question → exact script (deterministic keyword scoring, zero deps). |
+
+Companion to the toolbox: the `data-modeling` skill's
+[`model-large-field-split`](../skills/data-modeling/model-large-field-split.md)
+rule explains the TOAST anti-pattern, and its analyzer
+[`scripts/toast-split-advisor.sh`](../scripts/toast-split-advisor.sh) measures it.
+The scripts are guarded by the regression suite in [`../testing/`](../testing/README.md),
+and their token efficiency is measured in [`../token-tests/RESULTS.md`](../token-tests/RESULTS.md).
+
 ## Use when
 
 - Designing document schemas for Azure DocumentDB
