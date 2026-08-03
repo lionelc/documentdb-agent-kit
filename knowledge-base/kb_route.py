@@ -1,11 +1,17 @@
 #!/usr/bin/env python3
 """kb_route.py — DocumentDB Agent-Kit knowledge-base router (routing engine).
 
-Maps a natural-language diagnostic question to the exact agent-kit script that
-answers it (ONE HOP: query -> script). Reads knowledge-base/kb.json as the single
-source of truth. Deterministic keyword/example scoring (stdlib only, no deps) so
-it works without an LLM — and gives the LLM agent a structured, reproducible
-routing decision it can trust and explain.
+Maps a natural-language question to the exact agent-kit target that answers it
+(ONE HOP). There are two target spaces, both scored the same deterministic way
+(keyword/example scoring, stdlib only, no deps):
+
+  * Route A — `tools`  : read-only diagnostic scripts (query -> `bash scripts/*.sh`)
+  * Route B — `skills` : text guidance the agent opens (query -> `skills/*/SKILL.md`)
+
+kb.json is the single source of truth. The router reports the best of each space
+(`match` for scripts, `skill_match` for skills) and a `recommended` route, so it
+works without an LLM and gives the LLM agent a structured, reproducible decision
+it can trust and explain.
 
 This file is invoked by kb-route.sh (the CLI wrapper), which passes inputs via
 environment variables: KB, DB, JSON, MODE, QUERY. It is a standalone module so it
@@ -70,8 +76,9 @@ def score_tool(t, q_tokens, q_lower):
 
 
 def rank_tools(kb, query):
-    """Rank all tools for a query. Returns (ranked, q_tokens, q_lower) where
-    ranked is a list of (score, tool, matched_keywords) sorted best-first."""
+    """Rank all tools (Route A scripts) for a query. Returns (ranked, q_tokens,
+    q_lower) where ranked is a list of (score, tool, matched_keywords) sorted
+    best-first."""
     q_tokens = tokenize(query) - STOP
     q_lower = query.lower()
 
@@ -93,6 +100,36 @@ def rank_tools(kb, query):
     return ranked
 
 
+def rank_skills(kb, query):
+    """Rank all skills (Route B text targets) for a query, mirroring rank_tools.
+
+    Uses the same additive scoring (score_tool) over each skill's
+    keywords/example_queries, plus a routes_one_hop_skills boost. Returns a list
+    of (score, skill, matched_keywords) sorted best-first, or [] if the KB
+    defines no skills."""
+    skills = kb.get("skills", [])
+    if not skills:
+        return []
+    q_tokens = tokenize(query) - STOP
+    q_lower = query.lower()
+
+    route_boost = {}
+    for r in kb.get("routes_one_hop_skills", {}).get("examples", []):
+        r_tokens = tokenize(r["query"]) - STOP
+        ov = len(r_tokens & q_tokens)
+        frac = ov / max(1, len(r_tokens))
+        if frac > route_boost.get(r["skill"], 0):
+            route_boost[r["skill"]] = frac
+
+    ranked = []
+    for sk in skills:
+        s, hits = score_tool(sk, q_tokens, q_lower)
+        s += 2.0 * route_boost.get(sk["id"], 0.0)
+        ranked.append((s, sk, hits))
+    ranked.sort(key=lambda x: -x[0])
+    return ranked
+
+
 def run_list(kb, db, placeholder, as_json):
     if as_json:
         print(json.dumps(
@@ -107,6 +144,28 @@ def run_list(kb, db, placeholder, as_json):
         print(f"    run: {fill(t['invocation'], db, placeholder)}")
         print(f"    for: {t.get('produces','')}")
         ex = t.get("example_queries", [])
+        if ex:
+            print(f"    e.g. \"{ex[0]}\"")
+    return 0
+
+
+def run_skills_list(kb, as_json):
+    skills = kb.get("skills", [])
+    if as_json:
+        print(json.dumps(
+            [{"id": sk["id"], "name": sk.get("name"), "title": sk["title"],
+              "open": sk["path"], "produces": sk.get("produces")}
+             for sk in skills], indent=2))
+        return 0
+    if not skills:
+        print("No skills registered for routing yet. See kb.json skills[] to add one.")
+        return 0
+    print("Knowledge base skills (Route B — one-hop text targets):")
+    for sk in skills:
+        print(f"\n  [{sk['id']}]  {sk['title']}   ({sk.get('name','')})")
+        print(f"    open: {sk['path']}")
+        print(f"    for: {sk.get('produces','')}")
+        ex = sk.get("example_queries", [])
         if ex:
             print(f"    e.g. \"{ex[0]}\"")
     return 0
@@ -138,13 +197,26 @@ def run_workflows(kb, as_json):
 
 def run_route(kb, db, placeholder, as_json, query):
     if not query:
-        print("Provide a natural-language query, or use --list / --workflows.",
+        print("Provide a natural-language query, or use --list / --skills / --workflows.",
               file=sys.stderr)
         return 2
 
     ranked = rank_tools(kb, query)
     best_s, best_t, best_hits = ranked[0]
     alternatives = [(s, t) for s, t, _ in ranked[1:] if s > 0][:2]
+
+    ranked_sk = rank_skills(kb, query)
+    best_sk_s, best_sk, best_sk_hits = ranked_sk[0] if ranked_sk else (0.0, None, [])
+    sk_alternatives = [(s, sk) for s, sk, _ in ranked_sk[1:] if s > 0][:2]
+
+    # Which route (script vs skill) is the stronger answer? Ties favour the
+    # script (Route A) since a measured diagnostic beats generic guidance.
+    if best_sk_s > best_s and best_sk_s > 0:
+        recommended = "skill"
+    elif best_s > 0:
+        recommended = "script"
+    else:
+        recommended = None
 
     if as_json:
         out = {
@@ -157,27 +229,47 @@ def run_route(kb, db, placeholder, as_json, query):
             },
             "alternatives": [{"tool": t["id"], "score": round(s, 2)} for s, t in alternatives],
             "confident": best_s >= 2.0,
+            "skill_match": None if best_sk_s <= 0 else {
+                "skill": best_sk["id"], "name": best_sk.get("name"), "title": best_sk["title"],
+                "score": round(best_sk_s, 2), "matched_keywords": best_sk_hits,
+                "open": best_sk["path"],
+            },
+            "skill_alternatives": [{"skill": sk["id"], "score": round(s, 2)} for s, sk in sk_alternatives],
+            "skill_confident": best_sk_s >= 2.0,
+            "recommended": recommended,
         }
         print(json.dumps(out, indent=2))
         return 0
 
-    if best_s <= 0:
+    if best_s <= 0 and best_sk_s <= 0:
         print(f'No confident route for: "{query}"')
-        print("Available tools (use --list for details):")
-        for t in kb["tools"]:
-            print(f"  - {t['id']}: {t.get('produces','')}")
+        print("Available scripts (use --list) / skills (use --skills).")
         return 0
 
-    conf = "high" if best_s >= 4 else ("medium" if best_s >= 2 else "low")
     print(f'Query: "{query}"')
-    print(f'→ Route: [{best_t["id"]}]  {best_t["title"]}   (confidence: {conf}, score {best_s:.1f})')
-    if best_hits:
-        print(f'  matched: {", ".join(best_hits[:6])}')
-    print(f'  run: {fill(best_t["invocation"], db, placeholder)}')
-    if (not db) and (placeholder in best_t["invocation"]):
-        print(f'  (supply the database: --db <name>  — replaces {placeholder})')
-    if alternatives:
-        print("  alternatives: " + ", ".join(f"{t['id']} ({s:.1f})" for s, t in alternatives))
+
+    if best_s > 0:
+        conf = "high" if best_s >= 4 else ("medium" if best_s >= 2 else "low")
+        tag = "  ← recommended" if recommended == "script" else ""
+        print(f'→ Route A (script): [{best_t["id"]}]  {best_t["title"]}   (confidence: {conf}, score {best_s:.1f}){tag}')
+        if best_hits:
+            print(f'  matched: {", ".join(best_hits[:6])}')
+        print(f'  run: {fill(best_t["invocation"], db, placeholder)}')
+        if (not db) and (placeholder in best_t["invocation"]):
+            print(f'  (supply the database: --db <name>  — replaces {placeholder})')
+        if alternatives:
+            print("  alternatives: " + ", ".join(f"{t['id']} ({s:.1f})" for s, t in alternatives))
+
+    if best_sk_s > 0:
+        conf = "high" if best_sk_s >= 4 else ("medium" if best_sk_s >= 2 else "low")
+        tag = "  ← recommended" if recommended == "skill" else ""
+        print(f'→ Route B (skill):  [{best_sk["id"]}]  {best_sk["title"]}   (confidence: {conf}, score {best_sk_s:.1f}){tag}')
+        if best_sk_hits:
+            print(f'  matched: {", ".join(best_sk_hits[:6])}')
+        print(f'  open: {best_sk["path"]}')
+        if sk_alternatives:
+            print("  alternatives: " + ", ".join(f"{sk['id']} ({s:.1f})" for s, sk in sk_alternatives))
+
     return 0
 
 
@@ -195,6 +287,8 @@ def main():
 
     if mode == "list":
         return run_list(kb, db, placeholder, as_json)
+    if mode == "skills":
+        return run_skills_list(kb, as_json)
     if mode == "workflows":
         return run_workflows(kb, as_json)
     return run_route(kb, db, placeholder, as_json, query)

@@ -52,6 +52,13 @@ def _route_cases():
     return [(r["query"], r["tool"]) for r in spec["routes"]]
 
 
+def _skill_route_cases():
+    import yaml
+    spec = yaml.safe_load((Path(__file__).resolve().parents[1] /
+                           "expected-findings.yaml").read_text())
+    return [(r["query"], r["skill"]) for r in spec.get("skill_routes", [])]
+
+
 @pytest.mark.kbrouter
 @pytest.mark.parametrize("query,expected_tool", _route_cases())
 def test_query_routes_to_expected_tool(engine, kb, query, expected_tool):
@@ -71,6 +78,38 @@ def test_confident_routes_clear_threshold(engine, kb, expected):
             f"'{query}' scored {score:.2f} for '{tool['id']}', "
             f"below confident threshold {thr}"
         )
+
+
+# ── Route B (skills) routing correctness ────────────────────────────────────
+@pytest.mark.kbrouter
+@pytest.mark.parametrize("query,expected_skill", _skill_route_cases())
+def test_query_routes_to_expected_skill(engine, kb, query, expected_skill):
+    ranked = engine.rank_skills(kb, query)
+    assert ranked, "rank_skills returned no skills — is kb.json 'skills[]' populated?"
+    score, skill, hits = ranked[0]
+    assert skill["id"] == expected_skill, (
+        f"'{query}' routed to skill '{skill['id']}' (score {score:.2f}), "
+        f"expected '{expected_skill}'"
+    )
+
+
+@pytest.mark.kbrouter
+def test_confident_skill_routes_clear_threshold(engine, kb, expected):
+    thr = expected["min_confident_score"]
+    for query, _ in _skill_route_cases():
+        score, skill, _ = engine.rank_skills(kb, query)[0]
+        assert score >= thr, (
+            f"'{query}' scored {score:.2f} for skill '{skill['id']}', "
+            f"below confident threshold {thr}"
+        )
+
+
+@pytest.mark.kbrouter
+def test_every_registered_skill_points_at_an_existing_skill_md(kb):
+    """Each routable skill's `path` must resolve to a real SKILL.md on disk."""
+    for sk in kb.get("skills", []):
+        p = kit.REPO_DIR / sk["path"]
+        assert p.is_file(), f"skill '{sk['id']}' path does not exist: {sk['path']}"
 
 
 # ── scoring transparency: the multiword-phrase (+3.0) rule ──────────────────
@@ -119,3 +158,35 @@ def test_shell_wrapper_emits_valid_json(engine, kb):
     assert data["match"]["tool"] == "document-bloat-advisor"
     assert data["confident"] is True
     assert data["match"]["command"].startswith("bash scripts/document-bloat-advisor.sh")
+
+
+@pytest.mark.kbrouter
+def test_shell_wrapper_routes_skill_query(engine, kb, expected):
+    """A skill-flavoured query must resolve to a skill and be the recommended
+    route end-to-end through the shell wrapper."""
+    case = expected["skill_shell_case"]
+    p = subprocess.run(
+        ["bash", str(KB_SH), "--json", case["query"]],
+        capture_output=True, text=True, timeout=30,
+    )
+    assert p.returncode == 0, f"kb-route.sh failed: {p.stderr}"
+    data = json.loads(p.stdout)
+    assert data["skill_match"] is not None, "expected a skill_match in the output"
+    assert data["skill_match"]["skill"] == case["skill"]
+    assert data["skill_match"]["open"].endswith("SKILL.md")
+    assert data["skill_confident"] is True
+    assert data["recommended"] == "skill"
+
+
+@pytest.mark.kbrouter
+def test_shell_wrapper_lists_skills(engine, kb):
+    """--skills --json emits the registered skill catalog as valid JSON."""
+    p = subprocess.run(
+        ["bash", str(KB_SH), "--skills", "--json"],
+        capture_output=True, text=True, timeout=30,
+    )
+    assert p.returncode == 0, f"kb-route.sh --skills failed: {p.stderr}"
+    data = json.loads(p.stdout)
+    ids = {s["id"] for s in data}
+    assert "query-performance-tuning" in ids
+    assert len(data) == len(kb.get("skills", []))
