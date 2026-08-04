@@ -113,16 +113,34 @@ def test_every_registered_skill_points_at_an_existing_skill_md(kb):
 
 
 # ── scoring transparency: the multiword-phrase (+3.0) rule ──────────────────
+# ── scoring transparency: phrase rule (SKILLS) + 1-gram rule (TOOLS) ────────
 @pytest.mark.kbrouter
-def test_multiword_phrase_matches_and_scores(engine, kb, expected):
-    case = expected["phrase_case"]
-    score, tool, hits = _route(engine, kb, case["query"])
-    assert tool["id"] == case["tool"]
+def test_multiword_phrase_matches_and_scores_for_skills(engine, kb, expected):
+    """Skills keep phrase-aware matching: a multi-word skill keyword present as a
+    substring scores +3.0 and appears verbatim in the matched keywords."""
+    case = expected["skill_phrase_case"]
+    score, skill, hits = engine.rank_skills(kb, case["query"])[0]
+    assert skill["id"] == case["skill"]
     assert case["keyword"] in hits, (
         f"expected multiword keyword '{case['keyword']}' in matched hits {hits}"
     )
-    # a single multiword phrase hit alone is worth +3.0
     assert score >= 3.0, f"multiword phrase should score >= 3.0, got {score:.2f}"
+
+
+@pytest.mark.kbrouter
+def test_tool_onegram_matches_constituent_tokens(engine, kb, expected):
+    """Tools use 1-gram matching: a multi-word tool keyword is matched via its
+    constituent single tokens (the whole phrase is NOT required as a hit)."""
+    case = expected["tool_onegram_case"]
+    score, tool, hits = _route(engine, kb, case["query"])
+    assert tool["id"] == case["tool"], (
+        f"'{case['query']}' routed to '{tool['id']}', expected '{case['tool']}'"
+    )
+    assert case["token"] in hits, (
+        f"expected single token '{case['token']}' in matched hits {hits}"
+    )
+    # hits are single tokens, never multi-word phrases, under 1-gram
+    assert all(" " not in h for h in hits), f"1-gram hits must be single tokens: {hits}"
 
 
 @pytest.mark.kbrouter
@@ -134,14 +152,16 @@ def test_gibberish_is_not_confident(engine, kb):
 
 @pytest.mark.kbrouter
 def test_vague_query_declines_rather_than_guesses(engine, kb, expected):
-    """A vague query with no tool-specific signal must fall below the confident
-    threshold — the router should decline instead of over-confidently guessing."""
+    """A vague, non-specific query must fall below the confident threshold for
+    SKILLS — where routing to the wrong guidance is a real cost, the router
+    declines instead of guessing. (Tools intentionally over-trigger under 1-gram
+    matching, since running an extra read-only script is harmless.)"""
     query = expected["unconfident_case"]["query"]
-    score, tool, _ = _route(engine, kb, query)
+    score, skill, _ = engine.rank_skills(kb, query)[0]
     thr = expected["min_confident_score"]
     assert score < thr, (
-        f"vague query '{query}' should be below the confident threshold {thr}, "
-        f"but scored {score:.2f} for '{tool['id']}'"
+        f"vague query '{query}' should be below the confident threshold {thr} "
+        f"for skills, but scored {score:.2f} for '{skill['id']}'"
     )
 
 

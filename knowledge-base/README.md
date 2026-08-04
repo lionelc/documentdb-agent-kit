@@ -96,12 +96,23 @@ Currently routed skills (Route B — text guidance):
 | `connection` | "tune my connection pool", "maxPoolSize for serverless", "pool exhaustion" |
 
 **Routing is deterministic:** the router scores the query against each target's
-`keywords` / `example_queries` in `kb.json` (multi-word phrases weigh more than
-single tokens) plus the `routes_one_hop` / `routes_one_hop_skills` signal, and
-returns a ranked result **per space** (best script, best skill) with a confidence,
+`keywords` / `example_queries` in `kb.json`, plus the `routes_one_hop` /
+`routes_one_hop_skills` signal, and returns a ranked result **per space** (best
+script, best skill) with a confidence,
 alternatives, and a `recommended` route. No LLM required; same input → same route.
 
-## Multi-hop workflows (schema + scaffold)
+**Keyword matching differs by space, on purpose:**
+
+- **Tools (Route A / scripts) — 1-gram:** each keyword is split into single
+  tokens; every distinct matching query token scores `+1.5`. This favors
+  **recall** — a paraphrase like *"scan of the whole collection"* still matches
+  the `collection scan` keyword. Harmless, because the scripts are read-only, so
+  triggering an extra diagnostic costs nothing.
+- **Skills (Route B) — phrase-aware:** a multi-word keyword scores `+3.0` only as
+  a full-phrase substring (a single-word keyword `+1.5`). This keeps
+  **precision**, because routing to the wrong *guidance* is a real cost.
+
+Both spaces then add `+2.5×` best example-query overlap and `+2.0×` one-hop boost.
 
 Troubleshooting is rarely one script. The KB models a workflow as a **guarded
 diagnostic graph** (an AND/OR decision graph — the classic sequential-diagnosis

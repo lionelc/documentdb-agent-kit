@@ -44,27 +44,45 @@ def fill(invocation, db, placeholder):
     return invocation
 
 
-def score_tool(t, q_tokens, q_lower):
-    """Score one tool against the query.
+def score_tool(t, q_tokens, q_lower, onegram=False):
+    """Score one tool/skill against the query.
 
-    Signals (additive):
-      * multiword keyword phrase present as a substring -> +3.0 each
-      * single-word keyword present as a query token    -> +1.5 each
-      * best example-query token overlap                -> +2.5 * fraction
-    Returns (score, matched_keywords).
+    Two keyword-matching modes:
+
+    * ``onegram=False`` (phrase-aware, used for SKILLS): a multi-word keyword
+      scores +3.0 only when the whole phrase is present as a substring; a
+      single-word keyword scores +1.5 when present as a query token. Higher
+      precision — favored where picking the *right* guidance matters.
+    * ``onegram=True`` (1-gram, used for TOOLS/scripts): every keyword is split
+      into single-word tokens and each *distinct* query token that hits that set
+      scores +1.5. Higher recall (a paraphrase like "scan the collection" still
+      matches "collection scan"); harmless over-triggering since the diagnostic
+      scripts are read-only.
+
+    Both modes then add the best example-query token overlap (+2.5 * fraction).
+    Returns (score, matched_keywords) — for 1-gram, matched_keywords are the
+    matched single tokens.
     """
     score = 0.0
     hits = []
-    for kw in t.get("keywords", []):
-        kwl = kw.lower()
-        if " " in kwl:
-            if kwl in q_lower:
-                score += 3.0
-                hits.append(kw)
-        else:
-            if kwl in q_tokens:
-                score += 1.5
-                hits.append(kw)
+    if onegram:
+        kw_tokens = set()
+        for kw in t.get("keywords", []):
+            kw_tokens |= (tokenize(kw) - STOP)
+        for tok in sorted(q_tokens & kw_tokens):
+            score += 1.5
+            hits.append(tok)
+    else:
+        for kw in t.get("keywords", []):
+            kwl = kw.lower()
+            if " " in kwl:
+                if kwl in q_lower:
+                    score += 3.0
+                    hits.append(kw)
+            else:
+                if kwl in q_tokens:
+                    score += 1.5
+                    hits.append(kw)
     best_ex = 0.0
     for ex in t.get("example_queries", []):
         ex_tokens = tokenize(ex) - STOP
@@ -76,9 +94,10 @@ def score_tool(t, q_tokens, q_lower):
 
 
 def rank_tools(kb, query):
-    """Rank all tools (Route A scripts) for a query. Returns (ranked, q_tokens,
-    q_lower) where ranked is a list of (score, tool, matched_keywords) sorted
-    best-first."""
+    """Rank all tools (Route A scripts) for a query. Tools use **1-gram**
+    keyword matching (recall-favoring; harmless over-triggering as scripts are
+    read-only). Returns (ranked, q_tokens, q_lower) where ranked is a list of
+    (score, tool, matched_tokens) sorted best-first."""
     q_tokens = tokenize(query) - STOP
     q_lower = query.lower()
 
@@ -93,7 +112,7 @@ def rank_tools(kb, query):
 
     ranked = []
     for t in kb["tools"]:
-        s, hits = score_tool(t, q_tokens, q_lower)
+        s, hits = score_tool(t, q_tokens, q_lower, onegram=True)
         s += 2.0 * route_boost.get(t["id"], 0.0)
         ranked.append((s, t, hits))
     ranked.sort(key=lambda x: -x[0])
@@ -101,12 +120,11 @@ def rank_tools(kb, query):
 
 
 def rank_skills(kb, query):
-    """Rank all skills (Route B text targets) for a query, mirroring rank_tools.
-
-    Uses the same additive scoring (score_tool) over each skill's
-    keywords/example_queries, plus a routes_one_hop_skills boost. Returns a list
-    of (score, skill, matched_keywords) sorted best-first, or [] if the KB
-    defines no skills."""
+    """Rank all skills (Route B text targets) for a query. Skills keep the
+    **phrase-aware** matching (score_tool default) — higher precision, because
+    routing to the wrong *guidance* is a real cost (unlike an extra read-only
+    script). Returns a list of (score, skill, matched_keywords) sorted
+    best-first, or [] if the KB defines no skills."""
     skills = kb.get("skills", [])
     if not skills:
         return []
