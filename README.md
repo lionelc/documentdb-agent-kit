@@ -15,7 +15,7 @@ Skills follow the [Agent Skills](https://agentskills.io/) format and the kit shi
 
 👉 **Capabilities and skill catalog:** [`docs/SKILLS.md`](docs/SKILLS.md)
 
-👉 **New here? 10-minute quick start:** [Find & fix a slow query](docs/quickstart-find-and-fix-slow-queries.md) — run DocumentDB locally, load sample data, and let your AI assistant diagnose a `COLLSCAN` and fix it with one index (50,000 docs scanned → 10).
+👉 **New here? 10-minute quick start:** [Find & fix a slow query](docs/quickstart-find-and-fix-slow-queries.md) — run DocumentDB locally, load sample data, and let your AI assistant diagnose a `COLLSCAN` and fix it with one index (a full 50,000-document scan → a tiny index lookup).
 
 ## Diagnostic Toolbox — Quickstart
 

@@ -2,8 +2,9 @@
 
 **Time: ~10 minutes.** In this guide you'll run Azure DocumentDB locally, load a
 sample store dataset, ask your AI coding assistant *why a query is slow*, apply the
-one-line fix it recommends, and watch the same query go from scanning **50,000
-documents** to just **10** — with no application code change.
+one-line fix it recommends, and watch the same query go from scanning **all 50,000
+documents** to a **tiny index lookup** of just the rows that match — with no
+application code change.
 
 You don't need to know anything about the internals. If you have Docker and an AI
 coding assistant, you can follow along by copy-paste.
@@ -32,7 +33,7 @@ git clone https://github.com/Azure/documentdb-agent-kit
 cd documentdb-agent-kit
 ```
 
-> **Preview:** Azure DocumentDB and this kit are in public preview; details may
+> **Preview:** DocumentDB agent-kit is in public preview; details may
 > change. No production SLA.
 
 ---
@@ -70,29 +71,73 @@ The `orders` collection starts with **no indexes** (other than the default `_id`
 
 ---
 
-## Step 3 — Ask your assistant why a query is slow
+## Step 3 — Open a Mongo shell
 
-Here's a perfectly reasonable query — find a customer's shipped orders since the
-start of the year, newest first:
+The queries in the next steps are **MongoDB commands** — you run them at an
+interactive `mongosh` prompt connected to your local database. Open one now:
+
+```bash
+docker exec -it -u documentdb documentdb-local mongosh "localhost:10260/ecommerce" \
+  -u docdbadmin -p Test1234 --authenticationMechanism SCRAM-SHA-256 --tls \
+  --tlsAllowInvalidCertificates
+```
+
+You'll land at a prompt like this — every `db.orders.…` command below is typed here:
+
+```text
+[direct: mongos] ecommerce>
+```
+
+> Type `exit` (or press `Ctrl-D`) to leave the shell. Already using the DocumentDB
+> **MCP server** with your AI assistant? You can skip this shell — the assistant
+> runs the same commands for you.
+
+---
+
+## Step 4 — Ask your assistant why a query is slow
+
+Here's a perfectly reasonable query — find one customer's shipped orders since the
+start of the year, newest first.
+
+The sample data is generated **randomly**, so first grab a customer that actually
+has several shipped orders in *your* copy (run this at the `ecommerce>` prompt):
+
+```javascript
+db.orders.aggregate([
+  { $match: { status: "shipped", created_at: { $gte: ISODate("2024-01-01") } } },
+  { $group: { _id: "$customer_id", n: { $sum: 1 } } },
+  { $sort: { n: -1 } }, { $limit: 1 }
+])
+```
+
+That prints the busiest customer (for example `CUST_004087`). Use that id in the
+query below:
 
 ```javascript
 db.orders.find({
   status: "shipped",
-  customer_id: "CUST_004087",
+  customer_id: "CUST_004087",          // ← use the id printed above
   created_at: { $gte: ISODate("2024-01-01") }
 }).sort({ created_at: -1 })
 ```
 
-Paste this prompt to your AI assistant (the kit's skill will pick it up):
+Paste this prompt to your AI assistant — swap in your customer id (the kit's skill
+will pick it up):
 
 > **"Why is this query slow, and how do I fix it?"**
 > `db.orders.find({ status: "shipped", customer_id: "CUST_004087", created_at: { $gte: ISODate("2024-01-01") } }).sort({ created_at: -1 })`
 
 Your assistant will run `explain("executionStats")` and spot the problem: a
 **collection scan** (`COLLSCAN`) — the database reads **every one** of the 50,000
-documents to return just 10.
+documents just to return the handful (about 10) that match.
 
-> **Prefer to look yourself?** Run the same query with `.explain("executionStats")`.
+> **Prefer to look yourself?** At the `ecommerce>` prompt from Step 3, run the
+> same query with `.explain("executionStats")` appended:
+>
+> ```javascript
+> db.orders.find({ status: "shipped", customer_id: "CUST_004087", created_at: { $gte: ISODate("2024-01-01") } }).sort({ created_at: -1 }).explain("executionStats")
+> ```
+>
 > ⚠️ **Read the scan stage, not the summary.** The top-line time can look tiny (a
 > few milliseconds) even during a full scan — look at the `COLLSCAN` stage, where
 > `totalDocsExamined` is **50,000**.
@@ -102,37 +147,56 @@ right skill for a question — `bash knowledge-base/kb-route.sh "why is this que
 
 ---
 
-## Step 4 — Apply the recommended fix
+## Step 5 — Apply the recommended fix
 
 The skill recommends a single **compound index**, ordered by the **ESR rule**
-(Equality → Sort → Range), with the most selective field first:
+(Equality → Sort → Range), with the most selective field first. At the
+`ecommerce>` prompt, run:
 
 ```javascript
 db.orders.createIndex({ customer_id: 1, status: 1, created_at: -1 })
 ```
 
-Create it (your assistant will ask for approval first):
+(Your assistant will ask for approval before creating it.)
 
-```bash
-docker exec -u documentdb documentdb-local mongosh "localhost:10260/ecommerce" \
-  -u docdbadmin -p Test1234 --authenticationMechanism SCRAM-SHA-256 --tls \
-  --tlsAllowInvalidCertificates --quiet \
-  --eval 'db.orders.createIndex({ customer_id: 1, status: 1, created_at: -1 })'
+> **Not in the shell?** You can run it from your host in one line instead:
+>
+> ```bash
+> docker exec -u documentdb documentdb-local mongosh "localhost:10260/ecommerce" \
+>   -u docdbadmin -p Test1234 --authenticationMechanism SCRAM-SHA-256 --tls \
+>   --tlsAllowInvalidCertificates --quiet \
+>   --eval 'db.orders.createIndex({ customer_id: 1, status: 1, created_at: -1 })'
+> ```
+
+## Step 6 — See the improvement
+
+Run the query with `.explain("executionStats")` again at the `ecommerce>` prompt:
+
+```javascript
+db.orders.find({
+  status: "shipped",
+  customer_id: "CUST_004087",
+  created_at: { $gte: ISODate("2024-01-01") }
+}).sort({ created_at: -1 }).explain("executionStats")
 ```
 
-## Step 5 — See the improvement
-
-Run `explain("executionStats")` on the same query again. The `COLLSCAN` is gone,
-replaced by an **index scan** (`IXSCAN`) that examines only the rows it needs:
+The `COLLSCAN` is gone, replaced by an **index scan** (`IXSCAN`) that examines
+only the rows it needs:
 
 | | Before (no index) | After (ESR index) |
 |---|---|---|
 | Plan | `COLLSCAN` (full scan) | `IXSCAN` (index scan) |
-| Documents/keys examined | **50,000** | **10** |
-| Rows returned | 10 | 10 |
+| Documents/keys examined | **50,000** (every document) | **only the matching rows** (≈10) |
+| Rows returned | ≈10 | ≈10 |
 
-**~5,000× less work per query.** Same result, a fraction of the resources — which
-means more headroom to scale without adding infrastructure.
+**Thousands of times less work per query** (≈5,000× in the example above). Same
+result, a fraction of the resources — which means more headroom to scale without
+adding infrastructure.
+
+> **Your exact numbers will differ** — the sample data is generated randomly, so
+> the number of matching orders (and which customer is busiest) changes each time
+> you seed. What always holds is the pattern: a full **50,000-document scan**
+> collapses to a **tiny index lookup** of just the rows that match.
 
 ---
 
@@ -147,14 +211,16 @@ bash scenarios/ecommerce/query-perf-skill-test.sh
 ```
 
 You'll see the same pattern across different query shapes — the size of the win
-depends on how *selective* the filter is:
+depends on how *selective* the filter is (the **before → after** figures below are
+from one example run; your exact counts will vary with the random sample data, but
+the `order_id` lookup is always a unique 50,000 → 1):
 
 | Ask your assistant… | Recommended index | Examined: before → after |
 |---|---|---|
 | "Does this query use an index or a collection scan?" (`find` by `order_id`) | `{ order_id: 1 }` | 50,000 → **1** |
-| "Optimize `find({status, shipping_city}).sort({created_at})`" | `{ status: 1, shipping_city: 1, created_at: -1 }` | 50,000 → **998** |
-| "Tune the flagship `find({status, customer_id, created_at}).sort()`" | `{ customer_id: 1, status: 1, created_at: -1 }` | 50,000 → **10** |
-| "Which compound index for `find({status, total_amount:{$gt}}).sort({created_at})`?" | `{ status: 1, created_at: -1, total_amount: 1 }` | 50,000 → **8,899** |
+| "Optimize `find({status, shipping_city}).sort({created_at})`" | `{ status: 1, shipping_city: 1, created_at: -1 }` | 50,000 → **~1,000** |
+| "Tune the flagship `find({status, customer_id, created_at}).sort()`" | `{ customer_id: 1, status: 1, created_at: -1 }` | 50,000 → **~10** |
+| "Which compound index for `find({status, total_amount:{$gt}}).sort({created_at})`?" | `{ status: 1, created_at: -1, total_amount: 1 }` | 50,000 → **~8,900** |
 
 *(The test creates each index, measures, and drops it again, so your `orders`
 collection is left exactly as it started.)*
