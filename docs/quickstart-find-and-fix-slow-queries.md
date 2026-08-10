@@ -122,10 +122,39 @@ db.orders.find({
 ```
 
 Paste this prompt to your AI assistant — swap in your customer id (the kit's skill
-will pick it up):
+will pick it up). Give it the surrounding context too, so it can inspect the
+database itself instead of guessing:
 
-> **"Why is this query slow, and how do I fix it?"**
-> `db.orders.find({ status: "shipped", customer_id: "CUST_004087", created_at: { $gte: ISODate("2024-01-01") } }).sort({ created_at: -1 })`
+```text
+Why is this query slow on my Azure DocumentDB database, and how do I fix it?
+
+  db.orders.find({
+    status: "shipped",
+    customer_id: "CUST_004087",
+    created_at: { $gte: ISODate("2024-01-01") }
+  }).sort({ created_at: -1 })
+
+Context:
+- Azure DocumentDB (MongoDB-compatible) running locally in Docker,
+  container "documentdb-local", database "ecommerce", collection "orders".
+- ~50,000 orders. The only index is the default _id — I haven't added any.
+- Each order has: order_id, customer_id, status (pending/confirmed/shipped/
+  delivered/cancelled), payment_method, created_at, updated_at, shipping_city,
+  total_amount.
+- If you don't have a database connection, run commands through the shell:
+  docker exec -u documentdb documentdb-local mongosh "localhost:10260/ecommerce" \
+    -u docdbadmin -p Test1234 --authenticationMechanism SCRAM-SHA-256 --tls \
+    --tlsAllowInvalidCertificates --quiet --eval '<command>'
+
+Please run explain("executionStats"), tell me what the plan is doing, and
+recommend an index. Ask me before creating anything.
+```
+
+> **Why the extra context?** Without it the assistant has to guess which database
+> you mean and has no way to run `explain()` — so it can only give generic advice.
+> With it, it inspects *your* data and gives a specific answer. If you've set up
+> the [DocumentDB MCP server](https://github.com/microsoft/documentdb-mcp), the
+> assistant already has a connection and you can drop the `docker exec` line.
 
 Your assistant will run `explain("executionStats")` and spot the problem: a
 **collection scan** (`COLLSCAN`) — the database reads **every one** of the 50,000
