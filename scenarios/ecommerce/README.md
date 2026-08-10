@@ -26,8 +26,10 @@ bash scenarios/ecommerce/query-perf-skill-test.sh
 ```
 
 The query-perf test harness (`query-perf-skill-test.js` / `.sh`) validates the
-query-performance skills against this dataset; see the generated instruction doc
-under [`docs/`](../../docs/) (`query-perf-skill-test-instruction-*.md`).
+query-performance skills against this dataset: for each case it forces a
+`COLLSCAN` baseline, creates the index that skill recommends, re-measures, and
+drops it again — so it is idempotent. For a guided walkthrough of the same
+before/after, see [`docs/quickstart-find-and-fix-slow-queries.md`](../../docs/quickstart-find-and-fix-slow-queries.md).
 
 Prereq: a running `documentdb-local` container — see the repo
 [`README.md`](../../README.md#quickstart) *Quickstart*. Overrides: `--container`,

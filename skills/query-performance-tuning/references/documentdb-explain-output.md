@@ -120,6 +120,53 @@ leaving a bare `IXSCAN`.
 | `SORT` stage present | absent | present (blocking in-memory sort) |
 | `FETCH` stage present | absent = covered query | present (unavoidable if you need the full doc) |
 
+## ⚠️ On `documentdb-local`, index-backed sort and covered queries do NOT reproduce
+
+If you are testing against the **local** container image
+(`ghcr.io/microsoft/documentdb/documentdb-local`) rather than managed Azure
+DocumentDB, expect a **residual `SORT` and `FETCH` even with a perfect ESR
+index**. Do not diagnose this as a bad index — it is a configuration difference
+in the local image.
+
+Measured on the local image: with an ideal ESR index the plan stays
+`SORT → FETCH → IXSCAN`, and adding a covering projection does **not** remove the
+`FETCH`. Enabling the experimental engine flags below via
+`ALTER SYSTEM … ; SELECT pg_reload_conf();` — and even dropping and recreating the
+index so it builds under the new op class — **does not change the Mongo-API plan**:
+the gateway pins these settings per session (see its startup *"Dynamic
+configurations loaded"* log).
+
+| Engine flag | Local default | What it governs |
+|---|---|---|
+| `documentdb.enableIndexOrderbyPushdown` | `off` | pushes `ORDER BY` into the composite index → **index-backed sort** |
+| `documentdb.enableNewCompositeIndexOpClass` | `off` | the "new experimental composite index opclass" — prerequisite for ordered **and** covering composite indexes |
+| `documentdb.defaultUseCompositeOpClass` | `off` | whether default `createIndex` builds use that op class |
+| `documentdb.enableSortbyIdPushDownToPrimaryKey` | `off` | pushes `sort({_id})` onto the primary key |
+| `documentdb.forceRumIndexScantoBitmapHeapScan` | `on` | forces a bitmap heap scan (always re-fetches heap tuples) → **prevents index-only / covered scans** |
+| `documentdb.enableNewSelectivityMode` | `off` | newer planner selectivity logic (`indexCosts` / `selectivity` / `correlation`) |
+| `documentdb.enableMultiIndexRumJoin` | `off` | intersecting multiple indexes for one query |
+| `documentdb.enablePrimaryKeyCursorScan` | `off` | primary-key cursor scan for streaming cursors |
+
+Inspect the full set yourself:
+
+```bash
+docker exec documentdb-local psql -h localhost -p 9712 -U documentdb -d postgres \
+  -c "SELECT name, setting, short_desc FROM pg_settings WHERE name LIKE 'documentdb.%' ORDER BY name;"
+```
+
+**What this means for tuning locally:** the primary lever — replacing a `COLLSCAN`
+with a selective `IXSCAN` — reproduces fully, so judge a local index by
+**documents/keys examined at the scan stage**, not by whether the `SORT`/`FETCH`
+disappeared. On managed Azure DocumentDB these paths are enabled, which is why the
+published guidance shows the `SORT`/`FETCH` vanishing.
+
+### Related gotcha: `executionTimeMillis` is noisy on small result sets
+
+On small matches an "after" timing can exceed the "before" (plan caching,
+index-page warmup, sub-millisecond noise). That is itself the core lesson of this
+skill — *time can look fine while the query does far too much work* — so judge
+improvements by **scan-stage documents/keys examined**, which is stable.
+
 ## References
 
 - [How to read explain output](https://learn.microsoft.com/en-us/azure/documentdb/how-to-read-explain-output)
