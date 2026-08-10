@@ -58,7 +58,7 @@ is identical.
 | Container name | `documentdb-local` |
 | Gateway (Mongo API) | container-internal `localhost:10260`, TLS, SCRAM-SHA-256 |
 | PostgreSQL engine | container-internal `localhost:9712` |
-| Credentials | user `docdbadmin`, password `Test1234` (`DB_PASSWORD`) |
+| Credentials | user `docdbadmin`, from the `DB_PASSWORD` env var (choose your own) |
 | mongosh client | `2.3.8` |
 
 > **Reproducibility gotcha:** this `documentdb-local` image **does not bundle a `mongosh`
@@ -74,12 +74,13 @@ is identical.
 ### Bring up + seed
 
 ```bash
+# 0. pick a password for the throwaway local container; everything below reads it
+export DB_PASSWORD='<your-password>'
 # 1. start the container (host ports optional; seeders use docker exec)
-docker run -d --name documentdb-local -e USERNAME=docdbadmin -e PASSWORD=Test1234 \
+docker run -d --name documentdb-local -e USERNAME=docdbadmin -e PASSWORD="$DB_PASSWORD" \
   ghcr.io/microsoft/documentdb/documentdb-local:latest
 # 2. install mongosh into the container (see gotcha above)
 # 3. seed the ecommerce dataset (~50K orders; takes ~1 min)
-export DB_PASSWORD=Test1234
 bash scenarios/ecommerce/seed.sh
 ```
 
@@ -298,7 +299,7 @@ matter and are scale-independent; absolute milliseconds are not comparable.
 
 ```bash
 # prerequisites: container up + mongosh installed + ecommerce seeded (see §2)
-export DB_PASSWORD=Test1234
+export DB_PASSWORD='<your-password>'
 bash scenarios/ecommerce/query-perf-skill-test.sh          # prints the human report + a JSON block
 ```
 

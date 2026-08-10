@@ -14,7 +14,7 @@ the diagnostic toolbox: `perf-advisor.sh`, `index-redundancy-finder.sh`, and
 ## Run
 
 ```bash
-export DB_PASSWORD=Test1234                 # or pass --password
+export DB_PASSWORD='<your-password>'                 # or pass --password
 bash scenarios/ecommerce/seed.sh            # -> database "ecommerce"
 
 bash scripts/perf-advisor.sh          --db ecommerce

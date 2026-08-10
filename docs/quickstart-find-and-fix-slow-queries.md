@@ -40,9 +40,20 @@ cd documentdb-agent-kit
 
 ## Step 1 — Run DocumentDB locally
 
+First pick a password for your local container. Every command in this guide reads
+it from `DB_PASSWORD`, so you only type it once (choose anything — this container
+is a throwaway on your own machine):
+
+```bash
+export DB_PASSWORD='<choose-a-password>'
+```
+
+> Keep it in your shell for the whole walkthrough. If you open a **new terminal**,
+> re-run that `export` before continuing.
+
 ```bash
 docker run -d --name documentdb-local \
-  -e USERNAME=docdbadmin -e PASSWORD=Test1234 \
+  -e USERNAME=docdbadmin -e PASSWORD="$DB_PASSWORD" \
   ghcr.io/microsoft/documentdb/documentdb-local:latest
 ```
 
@@ -62,7 +73,6 @@ This seeds a realistic store database (`ecommerce`) — **50,000 orders**,
 customers, products, and more. It takes about a minute.
 
 ```bash
-export DB_PASSWORD=Test1234
 bash scenarios/ecommerce/seed.sh
 ```
 
@@ -78,7 +88,7 @@ interactive `mongosh` prompt connected to your local database. Open one now:
 
 ```bash
 docker exec -it -u documentdb documentdb-local mongosh "localhost:10260/ecommerce" \
-  -u docdbadmin -p Test1234 --authenticationMechanism SCRAM-SHA-256 --tls \
+  -u docdbadmin -p "$DB_PASSWORD" --authenticationMechanism SCRAM-SHA-256 --tls \
   --tlsAllowInvalidCertificates
 ```
 
@@ -141,9 +151,10 @@ Context:
 - Each order has: order_id, customer_id, status (pending/confirmed/shipped/
   delivered/cancelled), payment_method, created_at, updated_at, shipping_city,
   total_amount.
-- If you don't have a database connection, run commands through the shell:
+- If you don't have a database connection, run commands through the shell
+  (the password is in my DB_PASSWORD environment variable):
   docker exec -u documentdb documentdb-local mongosh "localhost:10260/ecommerce" \
-    -u docdbadmin -p Test1234 --authenticationMechanism SCRAM-SHA-256 --tls \
+    -u docdbadmin -p "$DB_PASSWORD" --authenticationMechanism SCRAM-SHA-256 --tls \
     --tlsAllowInvalidCertificates --quiet --eval '<command>'
 
 Please run explain("executionStats"), tell me what the plan is doing, and
@@ -192,7 +203,7 @@ db.orders.createIndex({ customer_id: 1, status: 1, created_at: -1 })
 >
 > ```bash
 > docker exec -u documentdb documentdb-local mongosh "localhost:10260/ecommerce" \
->   -u docdbadmin -p Test1234 --authenticationMechanism SCRAM-SHA-256 --tls \
+>   -u docdbadmin -p "$DB_PASSWORD" --authenticationMechanism SCRAM-SHA-256 --tls \
 >   --tlsAllowInvalidCertificates --quiet \
 >   --eval 'db.orders.createIndex({ customer_id: 1, status: 1, created_at: -1 })'
 > ```
@@ -235,7 +246,7 @@ The kit includes a ready-made test that runs several *before/after* comparisons
 for you and prints the results:
 
 ```bash
-export DB_PASSWORD=Test1234
+# uses the same DB_PASSWORD you exported in Step 1
 bash scenarios/ecommerce/query-perf-skill-test.sh
 ```
 

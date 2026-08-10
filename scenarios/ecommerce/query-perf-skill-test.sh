@@ -3,7 +3,7 @@
 # against the seeded `ecommerce` dataset in a local DocumentDB container.
 #
 # Prereq: a running `documentdb-local` container with the ecommerce dataset seeded
-#   export DB_PASSWORD=Test1234
+#   export DB_PASSWORD='<your-password>'
 #   bash scenarios/ecommerce/seed.sh
 #   bash scenarios/ecommerce/query-perf-skill-test.sh
 #
@@ -30,7 +30,7 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
-[[ -z "$PASSWORD" ]] && { echo "Error: no password. Set DB_PASSWORD or pass --password (local demo: export DB_PASSWORD=Test1234)." >&2; exit 1; }
+[[ -z "$PASSWORD" ]] && { echo "Error: no password. Set DB_PASSWORD or pass --password (e.g. export DB_PASSWORD='<your-password>')." >&2; exit 1; }
 [[ -f "$JS" ]] || { echo "Error: harness not found at $JS" >&2; exit 1; }
 
 # Copy the harness into the container and run it with the bundled mongosh.
