@@ -86,6 +86,21 @@ def mongosh_eval(db, js, container=CONTAINER, timeout=240):
     return (p.stdout or "") + (p.stderr or "")
 
 
+def can_authenticate(container=CONTAINER, timeout=60):
+    """Return (ok, detail) for a credential preflight against the container.
+
+    DocumentDB reports a bad SCRAM credential as the *very* misleading
+    `MongoServerError: Invalid key`, which otherwise surfaces much later as a
+    confusing "fixture seed failed" on every scenario. Checking once, up front,
+    turns ~30 cryptic failures into one actionable message.
+    """
+    out = mongosh_eval("admin", "db.runCommand({ping:1}).ok",
+                       container=container, timeout=timeout)
+    if "1" in (out or "").split():
+        return True, ""
+    return False, (out or "").strip()[:300]
+
+
 def seed(db, fixture_path, container=CONTAINER, timeout=300):
     """Copy a .js fixture into the container and execute it against `db`."""
     fixture_path = Path(fixture_path)

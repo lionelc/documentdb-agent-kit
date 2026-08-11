@@ -32,13 +32,33 @@ def container_name(request):
 def require_container(container_name):
     """Skip everything if the DocumentDB container isn't running or no password
     is configured (credentials are never baked in — set DOCDB_PASSWORD or
-    DB_PASSWORD)."""
+    DB_PASSWORD). If a password IS set but wrong, fail fast with a clear
+    message instead of ~30 cryptic seed failures."""
     if not kit.DB_PASSWORD:
         pytest.skip("No DB password configured — set DOCDB_PASSWORD or DB_PASSWORD "
-                    "(local demo: export DB_PASSWORD=Test1234)")
+                    "(e.g. export DB_PASSWORD='<your-password>')")
     if not kit.container_running(container_name):
         pytest.skip(f"DocumentDB container '{container_name}' is not running "
                     f"(start it, or pass --container / set DOCDB_CONTAINER)")
+
+    ok, detail = kit.can_authenticate(container_name)
+    if not ok:
+        # A bad credential is fatal for the whole session: aborting once with a
+        # clear message beats ~50 identical setup errors.
+        pytest.exit(
+            "Cannot authenticate to the DocumentDB container "
+            f"'{container_name}' as user '{kit.DB_USER}'.\n\n"
+            f"  The server said: {detail}\n\n"
+            "  NOTE: DocumentDB reports a wrong password as "
+            "'MongoServerError: Invalid key' — it is an AUTH failure, not a "
+            "malformed document.\n\n"
+            "  Fix: export the password the container was created with, e.g.\n"
+            "    docker inspect " + container_name +
+            " --format '{{range .Config.Env}}{{println .}}{{end}}' | grep PASSWORD\n"
+            "    export DB_PASSWORD='<that value>'\n"
+            "  Or recreate the container with a password you choose.",
+            returncode=2,
+        )
 
 
 @pytest.fixture
