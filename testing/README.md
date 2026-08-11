@@ -1,5 +1,13 @@
 # DocumentDB Agent-Kit — Regression Test Framework
 
+> **This is Loop A — the deterministic half.** The kit tests two different
+> things: `testing/` (here) proves the **diagnostic scripts** return the *same*
+> answer every time, while [`../evals/`](../evals/) measures whether the **text
+> skills** make an agent produce *better* output, and at what token cost.
+> Loop A is free and runs on every PR; Loop B costs AI credits.
+> See [`scenarios/determinism/`](scenarios/determinism/) for the repeatability
+> contract.
+
 This framework guards the agent-kit's **diagnostic skills/scripts** against
 regression. It is modelled on the [Cosmos DB agent-kit `testing-v2`] framework
 but adapted for a *diagnostic inspector* rather than an app generator.
