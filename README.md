@@ -63,11 +63,12 @@ bash knowledge-base/kb-route.sh --db contoso "why are my aggregations slow even 
 ```
 
 Demo datasets are seeders under [`scenarios/`](scenarios/) (they plant the
-problems the tools find). The regression suite in [`testing/`](testing/README.md)
-guards the scripts.
+problems the tools find). The kit is guarded by **two test loops** — deterministic
+script tests in [`testing/`](testing/README.md) and cross-model skill evals in
+[`evals/`](evals/README.md) — described in [`docs/TESTING.md`](docs/TESTING.md).
 
 - **Router:** [`knowledge-base/README.md`](knowledge-base/README.md) · **Demo datasets:** [`scenarios/`](scenarios/)
-- **Regression tests:** [`testing/README.md`](testing/README.md) · **Token study:** [`token-tests/RESULTS.md`](token-tests/RESULTS.md)
+- **Testing:** [`docs/TESTING.md`](docs/TESTING.md) · **Token study:** [`token-tests/RESULTS.md`](token-tests/RESULTS.md)
 
 ## Repo Structure
 
@@ -82,9 +83,10 @@ skills/
 scripts/                 # diagnostic toolbox — read-only analyzers + seeders
 knowledge-base/          # NL → script router (kb.json + kb_route.py) + demo
 scenarios/contoso/       # ready-to-run TOAST demo dataset (+ optional scaling-benchmark/)
-testing/                 # fixture-first regression suite for the scripts (pytest)
+testing/                 # Loop A — deterministic tests for the scripts (pytest)
+evals/                   # Loop B — cross-model skill evals (Vally) + cost accounting
 token-tests/             # measured token savings of scripts vs text-skill workflows
-docs/                    # SKILLS.md (catalog) + DIAGNOSTICS.md (toolbox guide)
+docs/                    # SKILLS.md (catalog), DIAGNOSTICS.md (toolbox), TESTING.md
 ```
 
 ## Installation

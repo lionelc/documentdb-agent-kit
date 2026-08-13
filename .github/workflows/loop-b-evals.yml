@@ -115,13 +115,15 @@ jobs:
         env:
           COPILOT_SDK_AUTH_TOKEN: ${{ secrets.COPILOT_SDK_AUTH_TOKEN }}
         run: |
-          ARGS=""
+          ARGS=()
           if [ -n "${{ inputs.variant }}" ]; then
-            ARGS="--variant ${{ inputs.variant }}"
+            # Quoted: variant selectors contain commas and '=' (e.g.
+            # 'model=claude-opus-5,skills=kit').
+            ARGS+=(--variant "${{ inputs.variant }}")
           fi
           npx vally experiment run documentdb-skills.experiment.yaml \
             --output-dir vally-experiment-results \
-            --compare $ARGS
+            --compare "${ARGS[@]}"
 
       - name: Cost report
         if: always()
