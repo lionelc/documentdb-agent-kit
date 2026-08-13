@@ -1,18 +1,33 @@
 # Scenario: remediation effect (before/after grading)
 
 **Loop:** A (deterministic)
-**Grading rung:** the strongest one available — *measured before/after delta*,
-not an LLM judge.
+**Grading rung:** *measured before/after delta* — chosen because this scenario's
+job is to prove determinism, which a judge cannot do.
 
 ## The idea
 
-Most "did the skill help?" questions get answered by asking a model to judge the
-answer. That is the weakest grader available: subjective, expensive,
-non-deterministic, and easily fooled by output that reads well but is wrong.
+LLM-as-a-judge is a normal and useful grader, and this kit uses it in Loop B for
+things that are genuinely a matter of degree — is the explanation clear, is the
+guidance well-targeted. What it cannot give us is **repeatability**: the same
+input can score differently across runs, so a judge is the wrong instrument for
+a suite whose whole purpose is to show that the diagnostic scripts return a
+stable, reproducible answer.
 
-For diagnostics we can do far better, because **the database is the oracle**.
-This scenario applies the kit's advice and measures whether the database
-actually improved.
+For diagnostics we happen to have a stronger option available, so we use it:
+**the database is the oracle.** This scenario applies the kit's advice and
+measures whether the database actually improved — a number, not an opinion.
+
+The rule of thumb across the kit is to pick the strongest criterion the scenario
+*allows*, not to avoid judges on principle:
+
+| Situation | Grader |
+|---|---|
+| The outcome is measurable in the system (plans, counters, result sets) | measure it — this scenario |
+| The outcome is structural (an index exists, a key order) | assert it |
+| The outcome is irreducibly qualitative (was the advice well explained?) | LLM-as-a-judge, blinded and cross-model (Loop B) |
+
+Judges are used where they are the right tool; here a measurement was available,
+and a measurement is what a determinism proof needs.
 
 ## The chain it closes
 

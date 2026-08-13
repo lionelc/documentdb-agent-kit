@@ -2,14 +2,16 @@
 
 WHY THIS FILE IS THE DIFFERENTIATOR
 -----------------------------------
-The Cosmos benchmark's own docs concede that client-side properties "a
-single-node local emulator CANNOT prove behaviorally" have to drop down to
-static source-code regex — the weakest grader they use.
+The Cosmos benchmark notes that client-side properties "a single-node local
+emulator CANNOT prove behaviorally" have to be checked with static source-code
+regex instead. That is the right call given their platform — a static check is
+better than no coverage — but it is inherently easier to satisfy accidentally
+than a runtime observation.
 
-DocumentDB gives us a way out. It is MongoDB-compatible on the surface and
-PostgreSQL underneath, and the verifier can talk to BOTH. So instead of
-grepping for `create_index(` and hoping, we ask the engine what actually
-happened:
+DocumentDB lets us avoid the trade-off. It is MongoDB-compatible on the
+surface and PostgreSQL underneath, and the verifier can talk to BOTH. So
+instead of grepping for `create_index(` and hoping, we ask the engine what
+actually happened:
 
   * `explain()` through the Mongo API  -> was the query planned as an index
     scan, and how many documents did it read per document returned?

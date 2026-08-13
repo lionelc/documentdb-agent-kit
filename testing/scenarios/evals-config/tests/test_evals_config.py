@@ -189,17 +189,25 @@ def test_every_stimulus_has_a_grader(spec):
 
 
 def test_graders_are_objective(spec):
-    """Grading-ladder policy: prefer objective graders; an LLM judge is the last
-    resort. Adding one should be a deliberate, reviewed change — hence this
-    test fails until the allowlist below is updated on purpose.
+    """Phase 1 stimuli should be graded reproducibly.
+
+    Not a prohibition on LLM judges — they are a normal grader and Loop B is
+    expected to use one for qualitative dimensions. But the Phase 1 stimuli are
+    all skill-TRIGGERING checks, which have a definite right answer, so a
+    reproducible grader is the correct fit and a judge here would add cost and
+    variance for nothing.
+
+    The allowlist is a speed bump, not a wall: adding a judge should be a
+    deliberate, reviewed change that records which stimulus needs it and why.
     """
-    objective = {"skill-invocation", "run-command", "file-exists", "regex"}
-    subjective = []
+    reproducible = {"skill-invocation", "run-command", "file-exists", "regex"}
+    others = []
     for stim in spec["stimuli"]:
         for g in stim["graders"]:
-            if g["type"] not in objective:
-                subjective.append((stim["name"], g["type"]))
-    assert not subjective, (
-        f"non-objective graders in use: {subjective}. If this is intentional, "
-        f"add the type to the allowlist in this test and record why."
+            if g["type"] not in reproducible:
+                others.append((stim["name"], g["type"]))
+    assert not others, (
+        f"graders outside the reproducible set are in use: {others}. If a "
+        f"judge is genuinely the right fit for that stimulus, add its type to "
+        f"the allowlist in this test and note why."
     )

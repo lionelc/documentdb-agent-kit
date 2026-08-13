@@ -90,7 +90,13 @@ would have them — the prompt **never tells the agent to use them**. This measu
 the skill's **organic** effect rather than a hinted best case. (Protocol borrowed
 from the MSBench `cosmos-sdk-skills` runner.)
 
-## Grading policy — judge is the last resort
+## Grading policy — match the grader to the claim
+
+LLM-as-a-judge is a legitimate and widely used grader, and Loop B relies on one
+for the qualitative dimensions no assertion can capture. The ordering below is
+about **fit**: prefer a criterion that is reproducible and hard to satisfy by
+accident, and reach for a judge when the thing being graded is genuinely a
+matter of degree rather than a fact about the system.
 
 Prefer, in order:
 
@@ -100,7 +106,7 @@ Prefer, in order:
 4. semantic equivalence vs a golden output
 5. **behavioural assertion** → `skill-invocation`, `tool-call`, `metric-threshold` ← *Phase 1 lives here*
 6. contract conformance
-7. LLM-as-a-judge → only for irreducibly subjective quality, blinded, cross-model panel, and always reported next to an objective score
+7. LLM-as-a-judge → for qualitative dimensions (clarity, targeting, tone); blinded, cross-model panel, and always reported next to an objective score so its reliability is visible
 
 A useful trick: convert 7 → 2/3 by **constraining the ask**. "Explain how to
 speed this up" is judge-only prose; "emit the exact `createIndex(...)` you

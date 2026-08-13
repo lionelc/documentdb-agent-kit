@@ -284,8 +284,15 @@ runs can be compared across tasks:
 
 ## The grading ladder
 
-Pick the **strongest** criterion the scenario allows. An LLM judge is the last
-resort, not the default.
+Pick the **strongest criterion the scenario allows** — strongest meaning most
+reproducible and hardest to satisfy accidentally.
+
+This is about fit, not about avoiding judges. LLM-as-a-judge is a normal grader
+and the right tool for qualities that are genuinely matters of degree (is the
+explanation clear? is the guidance well-targeted?), which is why Loop B uses
+one. It just cannot serve a scenario whose purpose is to prove **repeatability**,
+because the same input can score differently across runs. Where an outcome is
+measurable in the system, measure it; where it is a judgement, judge it.
 
 | Rung | Criterion | Used by |
 |---|---|---|
@@ -295,7 +302,7 @@ resort, not the default.
 | 4 | Semantic equivalence | query-generation scenarios |
 | 5 | Behavioural (does it run and do the right thing?) | future app-level evals |
 | 6 | Contract conformance | `scenarios/json-contract` |
-| 7 | LLM-as-a-judge | only irreducibly subjective items |
+| 7 | LLM-as-a-judge | qualitative dimensions — blinded, cross-model, reported next to an objective score |
 
 Improvement metrics are gameable, so they are **paired with regression guards** —
 `remediation-effect` runs `index-redundancy-finder.sh` to make sure "just index

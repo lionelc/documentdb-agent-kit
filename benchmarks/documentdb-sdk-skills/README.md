@@ -57,16 +57,18 @@ miss.
 | 3 | Data shape & indexing | `check_documentdb.py` | ★★ structural |
 | 4 | API conformance | `check_api.py` | ★★ |
 | 5 | Security hygiene | `check_skills.py` | ★★ |
-| 6 | Client configuration | `check_source.py` | ★ static, last resort |
+| 6 | Client configuration | `check_source.py` | ★ static — used only where no runtime signal exists |
 
-### Why this benchmark is stronger than its Cosmos ancestor
+### One advantage this benchmark has over its Cosmos ancestor
 
-The Cosmos benchmark's own docs concede that client-side properties "a
-single-node local emulator **cannot** prove behaviorally" have to fall back to
-static source regex — its weakest grader, and ~520 lines of it.
+The Cosmos benchmark notes that client-side properties "a single-node local
+emulator **cannot** prove behaviorally" are checked with static source regex
+instead — ~520 lines of it. Given their platform that is the right call; a
+static check beats no coverage. It is simply easier to satisfy by accident than
+a runtime observation is.
 
-DocumentDB gives us a way out. It is MongoDB-compatible on the surface and
-**PostgreSQL underneath**, and the verifier talks to *both*. So instead of
+DocumentDB lets us avoid the trade-off. It is MongoDB-compatible on the surface
+and **PostgreSQL underneath**, and the verifier talks to *both*. So instead of
 grepping for `create_index(` and hoping:
 
 - `explain()` through the Mongo API → was the query planned as an index scan,

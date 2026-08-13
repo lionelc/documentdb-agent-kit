@@ -1,14 +1,18 @@
-"""Before/after remediation grading — the strongest rung of the grading ladder.
+"""Before/after remediation grading — a measured delta rather than a judgement.
 
 WHY THIS SCENARIO EXISTS
 ------------------------
-Most "did the skill help?" questions get answered by asking a model to judge the
-answer. That is the weakest possible grader: it is subjective, expensive,
-non-deterministic, and vulnerable to output that reads well but is wrong.
+"Did the skill help?" is often answered by asking a model to judge the answer,
+and that is a reasonable grader for qualities that are matters of degree. This
+kit uses one in Loop B for exactly that.
 
-For diagnostics we can do far better, because the database is the oracle. We can
-apply the advice and MEASURE whether the database improved. This scenario closes
-the whole chain objectively:
+It is the wrong instrument HERE, though, for a specific reason: this suite lives
+in the deterministic loop, and its job is to show the diagnostic scripts return
+a stable, reproducible answer. A judge cannot demonstrate repeatability — the
+same input can score differently across runs.
+
+For diagnostics we have a stronger option available, so we take it: the database
+is the oracle. We apply the advice and MEASURE whether the database improved.
 
     1. the tool detects a real defect          (else "improvement" is meaningless)
     2. the fix is DERIVED FROM THE TOOL'S OWN OUTPUT, not hardcoded here
