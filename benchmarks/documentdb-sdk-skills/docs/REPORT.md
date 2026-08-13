@@ -202,6 +202,57 @@ design needs revisiting, not the write-up.
 
 ---
 
+## 3b. What "quality" means here — and what the judge is
+
+**There is no LLM judge in this benchmark.** The verifier makes zero model
+calls. The judge is **30 deterministic pytest checks**, and the quality
+comparison between arms is the per-category pass rate
+(`checks_<category>_passed / _total`).
+
+| Module | Checks | What it judges |
+|---|---|---|
+| `check_api` | 6 | endpoints, status codes, payload shapes |
+| `check_behavior` | 6 | real persistence, round-trip, no duplicates |
+| `check_documentdb` | 6 | discriminator, schemaVersion, timestamp, indexing, ESR |
+| `check_engine` | 4 | query plan, scan amplification, index actually used |
+| `check_source` | 4 | singleton client, pool/timeouts, TLS |
+| `check_skills` | 4 | no hardcoded credentials, env-driven config |
+
+That is a real quality signal and a reproducible one. But it measures a
+specific thing, and the claim must match it.
+
+### What this can and cannot support
+
+✅ **Can support:** *"agents with the kit installed follow Azure DocumentDB
+best practices more often"* — that is precisely what the rubric encodes, and
+the per-category table shows where.
+
+❌ **Cannot support (without qualification):** *"the kit produces better
+solutions."* Three blind spots:
+
+1. **Ties are invisible.** Two submissions both scoring 31/31 may differ a lot
+   in readability, structure or error handling. The rubric cannot separate them.
+2. **Unanticipated merit scores zero.** The rubric rewards only what it names.
+   An agent that solves the problem in a smarter way we did not encode gets no
+   credit for it.
+3. **The rubric is our opinion, frozen into code.** If a rule is wrong or
+   incomplete, the benchmark measures the wrong thing — and does so
+   confidently, with a reassuring number attached.
+
+### Where a judge would belong
+
+Not here. The verifier runs offline in a task container with no model access,
+and the reward is binary, so a judge would fit badly. Qualitative assessment
+belongs in **Loop B**, which drives real models and has native support for
+`panel` / prompt graders.
+
+**Status: not yet configured.** `evals/documentdb-skills/eval.yaml` currently
+uses only `skill-invocation` graders — it verifies the right skill *fires*, not
+whether the guidance it produced was any good. Until that gap is closed, no
+number produced anywhere in this kit speaks to guidance quality.
+
+---
+
 ## 4. How to produce the real report
 
 ```bash

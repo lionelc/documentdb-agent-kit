@@ -3,6 +3,19 @@
 # Phase 1 scope: does the RIGHT skill activate for a given phrasing, and — just
 # as important — does NO DocumentDB skill activate for an unrelated question?
 #
+# ⚠️ SCOPE LIMIT — READ THIS BEFORE QUOTING ANY RESULT FROM THIS EVAL.
+# Every grader here is `skill-invocation`: it checks that a skill FIRED, never
+# that the guidance it produced was any GOOD. Nothing in this file, and nothing
+# in the MSBench benchmark (which grades rubric conformance with deterministic
+# checks), assesses the QUALITY of the advice.
+#
+# That is a real gap, not an oversight to be glossed: a skill could trigger
+# perfectly and give poor advice, and this eval would report a pass. Closing it
+# means adding a `panel` / prompt grader with a written rubric, blinded to the
+# arm and judged by a model not under test — see evals/README.md §Grading
+# policy. Until then, claims must be limited to routing and to best-practice
+# conformance, not to "better answers".
+#
 # Why start here (see the grading ladder in the plan):
 #   * it is the cheapest useful signal (runs on the free `mock` executor),
 #   * it is graded OBJECTIVELY (`skill-invocation` = binary), no LLM judge,
