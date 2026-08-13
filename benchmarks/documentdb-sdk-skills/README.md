@@ -210,6 +210,13 @@ msbench-cli run --benchmark documentdb-sdk-skills \
   --backend local
 ```
 
+## Results
+
+**No MSBench run has been executed yet**, so there is no effectiveness data.
+[`docs/REPORT.md`](docs/REPORT.md) records what has been measured (grader
+validation), what has not, and how to generate the real report with
+[`report.py`](report.py) once both arms have run.
+
 ## Verification status
 
 Verified by running, not by inspection:

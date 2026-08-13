@@ -292,3 +292,110 @@ def test_reader_does_not_mutate_the_session_store(store):
     before = store.read_bytes()
     hm.read_usage(store)
     assert store.read_bytes() == before
+
+
+# ---------------------------------------------------------------------------
+# report generator (Loop C effectiveness report)
+# ---------------------------------------------------------------------------
+import importlib.util as _ilu
+from pathlib import Path as _Path
+
+# tests/ -> benchmark-metrics/ -> scenarios/ -> testing/ -> repo root
+_REPORT_PY = (_Path(__file__).resolve().parents[4]
+              / "benchmarks" / "documentdb-sdk-skills" / "report.py")
+
+
+def _report_mod():
+    spec = _ilu.spec_from_file_location("_report", _REPORT_PY)
+    mod = _ilu.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
+def _msbench_report(benchmark, resolved, values_by_instance):
+    """Shape mirrors `msbench-cli report --output <f>.json` (msbench.report 2.0)."""
+    return {
+        "schema": {"id": "msbench.report", "version": "2.0.0"},
+        "resolved": {benchmark: resolved},
+        "custom_metrics": {
+            benchmark: {k: {"values": v} for k, v in values_by_instance.items()}
+        },
+    }
+
+
+def test_report_counts_only_true_as_a_pass():
+    """`resolved` values may be bool OR the string "error". Counting "error" as
+    anything but a failure would silently inflate the published pass rate."""
+    m = _report_mod()
+    rep = _msbench_report(
+        "documentdb-sdk-skills",
+        {"a": True, "b": False, "c": "error"},
+        {"a": {"tokens_available": 1}, "b": {"tokens_available": 1},
+         "c": {"tokens_available": 1}},
+    )
+    s = m.summarise(rep, "documentdb-sdk-skills")
+    assert s["instances"] == 3
+    assert s["passed"] == 1
+    assert s["pass_rate"] == pytest.approx(1 / 3)
+
+
+def test_report_flags_instances_with_no_token_data():
+    """A missing cost figure must be visible, not averaged in as zero."""
+    m = _report_mod()
+    rep = _msbench_report(
+        "documentdb-sdk-skills",
+        {"a": True, "b": True},
+        {"a": {"tokens_available": 1, "ai_credits": 10.0},
+         "b": {"tokens_available": 0}},
+    )
+    s = m.summarise(rep, "documentdb-sdk-skills")
+    assert s["missing_token_data"] == 1
+    # the mean is over the ONE instance that reported, not diluted by a zero
+    assert s["cost"]["ai_credits"] == pytest.approx(10.0)
+    assert s["cost_n"]["ai_credits"] == 1
+
+
+def test_report_requires_both_arms():
+    """A one-armed report is uninterpretable: an absolute pass rate cannot
+    distinguish an effective kit from an easy task."""
+    m = _report_mod()
+    with pytest.raises(SystemExit):
+        m.main(["--treatment", str(_REPORT_PY)])  # no --control
+
+
+def test_credits_per_passing_result_charges_failures_to_successes(tmp_path):
+    """5 runs at 100 credits with 1 pass costs 500 per success, not 100."""
+    m = _report_mod()
+    rep = _msbench_report(
+        "documentdb-sdk-skills",
+        {f"i{n}": (n == 0) for n in range(5)},
+        {f"i{n}": {"tokens_available": 1, "ai_credits": 100.0} for n in range(5)},
+    )
+    s = m.summarise(rep, "documentdb-sdk-skills")
+    ctl = m.summarise(
+        _msbench_report("documentdb-sdk-skills-noskills",
+                        {"i0": True},
+                        {"i0": {"tokens_available": 1, "ai_credits": 100.0}}),
+        "documentdb-sdk-skills-noskills")
+    m.render(s, ctl)  # populates _cpp
+    assert s["_cpp"] == pytest.approx(500.0)
+
+
+def test_report_renders_the_headline_and_category_tables():
+    m = _report_mod()
+    t = m.summarise(_msbench_report(
+        "documentdb-sdk-skills", {"a": True},
+        {"a": {"tokens_available": 1, "ai_credits": 5.0,
+               "checks_engine_passed": 4, "checks_engine_total": 4}}),
+        "documentdb-sdk-skills")
+    c = m.summarise(_msbench_report(
+        "documentdb-sdk-skills-noskills", {"a": False},
+        {"a": {"tokens_available": 1, "ai_credits": 4.0,
+               "checks_engine_passed": 0, "checks_engine_total": 4}}),
+        "documentdb-sdk-skills-noskills")
+    out = m.render(t, c)
+    assert "Pass rate" in out
+    assert "`engine`" in out
+    assert "Credits per passing result" in out
+    # the reader must be steered away from raw input tokens
+    assert "fresh" in out.lower()

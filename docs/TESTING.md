@@ -266,6 +266,20 @@ msbench-cli report --run_id <id> --output report.json   # includes token cost
 > `pip install msbench` installs an **unrelated** package. The real tool is
 > `msbench-cli` from the private feed.
 
+### The effectiveness report
+
+```bash
+msbench-cli report --run_id <treatment> --output treatment.json
+msbench-cli report --run_id <control>   --output control.json
+python3 benchmarks/documentdb-sdk-skills/report.py \
+  --treatment treatment.json --control control.json
+```
+
+`report.py` refuses to run on a single arm: an absolute pass rate cannot
+distinguish an effective kit from an easy task. Current status and the full
+provenance of every number are in
+[`benchmarks/documentdb-sdk-skills/docs/REPORT.md`](../benchmarks/documentdb-sdk-skills/docs/REPORT.md).
+
 ### Cost per task
 
 The verifier writes MSBench `custom_metrics.json` with per-task token usage, so
