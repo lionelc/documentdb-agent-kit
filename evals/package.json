@@ -1,11 +1,14 @@
 {
   "name": "documentdb-agent-kit-evals",
   "private": true,
-  "description": "Loop B — skill-efficacy evals for the DocumentDB agent kit, run with Vally",
+  "description": "Loop B \u2014 skill-efficacy evals for the DocumentDB agent kit, run with Vally",
   "scripts": {
     "lint": "vally lint -e documentdb-skills/eval.yaml",
     "eval:mock": "vally eval -e documentdb-skills/eval.yaml --executor mock",
-    "eval": "vally eval -e documentdb-skills/eval.yaml"
+    "eval": "vally eval -e documentdb-skills/eval.yaml",
+    "experiment:plan": "vally experiment run documentdb-skills.experiment.yaml --dry-run",
+    "experiment": "vally experiment run documentdb-skills.experiment.yaml --compare",
+    "tokens": "python3 harness/token_usage.py"
   },
   "devDependencies": {
     "@microsoft/vally-cli": "0.13.0"
