@@ -12,6 +12,64 @@ once a run exists.
 
 ---
 
+## 0. What "treatment" and "control" mean here
+
+Borrowed from experimental design: you change **one** thing and hold everything
+else fixed, so any difference in the result is attributable to that one thing.
+
+**The treatment is: the DocumentDB agent kit's skills are installed and
+discoverable.** That is the entire intervention.
+
+| | Control arm | Treatment arm |
+|---|---|---|
+| Benchmark | `documentdb-sdk-skills-noskills` | `documentdb-sdk-skills` |
+| `~/.copilot/skills/` | **empty** | **17 SKILL.md files** copied in |
+| Task, prompt, API contract | identical | identical |
+| Model, agent, container, verifier | identical | identical |
+| Is the agent told to use the skills? | n/a | **no — never mentioned** |
+
+Implemented in [`shared/ces/runner.sh`](../shared/ces/runner.sh): `SKILLS_ARM=kit`
+copies the skills into the agent's personal skills directory; `SKILLS_ARM=control`
+installs nothing and deletes the directory defensively, so a stale image layer
+cannot leak skills into the control.
+
+### What that means for the TOKEN comparison specifically
+
+The token delta answers: **what does having the kit installed cost?**
+
+- **Control:** there are no skill files, so there is nothing for the agent to
+  discover or read. Its input tokens are the task and its own work.
+- **Treatment:** the skills are on disk. When the agent judges one relevant it
+  *reads* the `SKILL.md`, and those bytes become input tokens.
+
+So `tokens_fresh_input(treatment) − tokens_fresh_input(control)` is, quite
+literally, the price of the kit being available and used.
+
+Two things stop that number from being read naively:
+
+1. **Skills are cached.** A payload is sent once and then served from cache
+   (~92% of input was cache reads in practice), so raw `tokens_input` badly
+   overstates the marginal cost. The report leads with *fresh* (uncached) input.
+2. **More tokens per attempt is not the same as more expensive.** "Skills add
+   context, therefore skills cost more" is trivially true and uninteresting. The
+   question is whether that extra context buys **fewer attempts and more
+   successes** — which is why the headline cost figure is *credits per passing
+   result*, not credits per run.
+
+The hypothesis being tested is: treatment spends **more per attempt**, needs
+**fewer turns**, passes **more often**, and therefore costs **less per success**.
+If the run shows otherwise, that is a finding we need, not a result to bury.
+
+### Why not just run it once and look at the number?
+
+Because an absolute score is uninterpretable. If the treatment arm resolves 80%
+of attempts, that could mean the kit is excellent — or that the task is easy
+enough for any competent agent. Only the control tells you which.
+[`report.py`](../report.py) refuses to produce a report from a single arm for
+this reason.
+
+---
+
 ## 1. What has been measured
 
 The benchmark's **grader** has been validated end-to-end on a local build. This

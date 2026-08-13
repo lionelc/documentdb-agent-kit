@@ -151,9 +151,16 @@ def render(t: dict, c: dict) -> str:
     A = L.append
     A("# DocumentDB agent kit — MSBench effectiveness report")
     A("")
-    A(f"- **Treatment:** `{t['benchmark']}` — kit installed, discoverable, "
-      f"never mentioned in the prompt")
-    A(f"- **Control:** `{c['benchmark']}` — identical task, no skills")
+    A("**The intervention being measured is: the DocumentDB agent kit's skills "
+      "are installed and discoverable.** Everything else — task, prompt, model, "
+      "agent, container, verifier — is identical between the two arms, so any "
+      "difference is attributable to the kit.")
+    A("")
+    A(f"- **Treatment** (`{t['benchmark']}`): skills installed in the agent's "
+      f"skills directory, and **never mentioned in the prompt** — this measures "
+      f"whether an agent that merely *has* the kit applies it.")
+    A(f"- **Control** (`{c['benchmark']}`): no skills installed. Nothing for the "
+      f"agent to discover or read.")
     A("")
     pak = t.get("pass_at_k") or {}
     if pak:
@@ -174,6 +181,11 @@ def render(t: dict, c: dict) -> str:
 
     A("## Cost")
     A("")
+    A("What the kit costs. The control has no skill files to read, so the input "
+      "delta is literally the price of the kit being available and used. Note "
+      "that *more tokens per attempt is not the same as more expensive* — see "
+      "credits per passing result below.")
+    A("")
     A("| Metric | Control | Treatment | Delta |")
     A("|---|---|---|---|")
     for key, label, fmt in COST_METRICS:
@@ -192,6 +204,11 @@ def render(t: dict, c: dict) -> str:
     A("| Derived | Control | Treatment |")
     A("|---|---|---|")
     A(f"| **Credits per passing result** | {c_cpp} | {t_cpp} |")
+    A("")
+    A("*Credits per passing result* is the figure that matters: total spend "
+      "divided by successes, so failed attempts are charged to the successes "
+      "they paid for. An arm that costs more per attempt but passes far more "
+      "often is cheaper where it counts.")
     A("")
 
     if t["check_rates"] or c["check_rates"]:

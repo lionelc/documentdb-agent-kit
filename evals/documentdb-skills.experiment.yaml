@@ -7,6 +7,22 @@
 #     Does installing the DocumentDB agent kit change what an agent does,
 #     across models, by more than run-to-run noise — and what does it cost?
 #
+# WHAT "TREATMENT" AND "CONTROL" MEAN
+# -----------------------------------
+# The INTERVENTION being measured is: the agent kit's skills are installed and
+# discoverable. That is the only thing that differs between the two arms.
+#
+#   control  -> environment.skills = []          (nothing to discover or read)
+#   kit      -> environment.skills = [...]       (the skills, never mentioned)
+#
+# Model, prompt, stimuli, graders and run count are held identical, so any
+# difference in quality or token cost is attributable to the kit.
+#
+# For TOKENS specifically: the control has no skill files, so its input is just
+# the prompt and its own work. The treatment reads a SKILL.md when it judges one
+# relevant, and those bytes become input tokens. The delta is the price of the
+# kit being available and used.
+#
 # THE CONTROL ARM IS THE WHOLE POINT
 # ----------------------------------
 # An absolute score is uninterpretable. "90% of stimuli passed" means nothing

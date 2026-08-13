@@ -173,6 +173,14 @@ npm run experiment
 The matrix is **3 models × 2 arms × 5 runs = 30 trials per stimulus**. Start
 with one cell.
 
+### What "treatment" vs "control" means
+
+The intervention is **the kit's skills being installed and discoverable** —
+nothing else differs. The control has no skill files, so there is nothing for
+the agent to read; the treatment has them on disk but is **never told to use
+them**. For cost, that makes the input-token delta the literal price of the kit
+being available and used.
+
 ### Two rules for reading Loop B results
 
 1. **Only deltas are publishable.** An absolute pass-rate is uninterpretable —
