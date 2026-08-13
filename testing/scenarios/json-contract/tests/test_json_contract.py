@@ -66,8 +66,14 @@ def test_perf_advisor_nested_shape(json_outputs):
     d = json_outputs["perf-advisor.sh"].json
     assert isinstance(d["mongo"], list) and d["mongo"], "perf: mongo[] is empty"
     m = d["mongo"][0]
-    for key in ("collections", "index_health", "collscans", "slow_queries", "summary"):
+    for key in ("collections", "index_health", "collscans",
+                "query_timings", "slow_queries", "summary"):
         assert key in m, f"perf mongo[0] missing '{key}'"
+    # query_timings is the deterministic view (every probe); slow_queries is the
+    # threshold-filtered subset of it, so it can never be the larger of the two.
+    assert len(m["slow_queries"]) <= len(m["query_timings"]), (
+        "perf: slow_queries must be a subset of query_timings"
+    )
     assert isinstance(d["pg"], dict), "perf: pg is not an object"
     for key in ("config", "cache_top", "scan_mix", "unused_pg_indexes", "blocked_queries"):
         assert key in d["pg"], f"perf pg missing '{key}'"

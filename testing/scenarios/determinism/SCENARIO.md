@@ -57,33 +57,46 @@ Two fixture details that matter:
 | `scripts[].must_find` | output must be non-empty (anti-false-determinism) |
 | `volatile_fields` | live measurements removed before comparison |
 | `order_insensitive_lists` | lists sorted by a volatile metric, so order-normalised |
-| `sampled_count_maps` | `{category: count}` maps from `$sample` — counts blanked, categories kept |
-| `sampled_size_strings` | summary strings with sampled byte sizes — sizes blanked, field ranking kept |
+| `sampled_count_maps` | **now empty** — kept so re-introducing a normalisation is a reviewable change |
+| `sampled_size_strings` | **now empty** — same reason |
 
-## Findings this suite produced on its first run
+## Findings this suite produced — and what was done about them
 
-It immediately caught **two real sampling nondeterminisms** — both now documented
-in `expected-findings.yaml` with a follow-up, not silently normalised away:
+The suite caught **four real nondeterminism bugs**. All four have been **fixed at
+the source** rather than normalised away. The history is kept because it is the
+evidence that this suite does something.
 
-1. **`data-integrity-check.sh`** uses `$sample` for type-consistency, so counts
-   wobble: `{"number": 87, "string": 13}` vs `{"number": 85, "string": 15}`.
-   The *finding* (`amount` holds both numbers and strings) is stable and is still
-   asserted; only the sampled counts are blanked.
-2. **`document-bloat-advisor.sh`** derives `dominant_fields` from a sample, so
-   average field sizes wobble (`title:13B` vs `title:12B`). The field **ranking**
-   — and therefore `recommended_split_field` — is stable and still asserted.
+| # | Script | Bug | Fix |
+|---|---|---|---|
+| 1 | `data-integrity-check.sh` | `$sample` for type-consistency → counts wobbled (`{"number":87,"string":13}` vs `{"number":85,"string":15}`) | deterministic sampler |
+| 2 | `document-bloat-advisor.sh` | `$sample` for `dominant_fields` → sizes wobbled (`title:13B` vs `title:12B`) | deterministic sampler + tie-broken sort |
+| 3 | `perf-advisor.sh` | `slow_queries` membership decided by a wall-clock threshold → *which* queries qualified changed with cache warmth | split into `query_timings` (deterministic membership) + `slow_queries` (measurement) |
+| 4 | `perf-advisor.sh` | COLLSCAN audit built probe values from `findOne()`, i.e. an **arbitrary** document → a numeric probe of `val/2` scanned a different fraction each run, changing `docs_scanned` and sometimes the chosen plan | probe the first document by `_id` |
 
-3. **`perf-advisor.sh`** builds `slow_queries` by *timing* queries against a
-   threshold — so it is not only the `ms` value that moves, but **which queries
-   qualify**. It passed in isolation and failed inside the full test run, where
-   cache warmth and load differ. The list and its summary count are treated as
-   volatile; perf-advisor's *structural* findings (collections, `index_health`,
-   `collscans`) are still asserted.
+Bug 4 is the interesting one: it was **invisible until bug 3 was fixed**. While
+the timing noise was being normalised away, it masked a genuine logic defect
+underneath. That is the argument for keeping the volatile-field allowlist as
+small as possible — every entry can hide a real bug.
 
-**Follow-up (open):** make both samplers deterministic (e.g. order by `_id` and
-take the first N) so the counts stabilise too. `slow_queries` is inherently
-timing-based and will likely always be volatile — that is a property of the
-measurement, not a bug.
+### The deterministic sampler
+
+Both samplers now take half the documents from **each end** of `_id` order
+instead of `$sample`. Head+tail rather than head-only is deliberate: mixed types
+usually arrive from schema drift over time, so the oldest and newest documents
+are exactly where the disagreement lives. Sampling only the head would
+systematically miss a type change introduced after the collection was created.
+
+Verified after the fix: 3 consecutive runs byte-identical, with the findings
+still detected (`invoices.amount {"number":86,"string":14}`;
+`dominant_fields "body:4002B,notes:2002B,title:12B"`).
+
+### What remains volatile — and why that is correct
+
+`slow_queries` and the PostgreSQL live counters stay in the allowlist. These are
+**measurements, not findings**: whether a query crosses 50 ms genuinely depends
+on cache warmth and machine load. The fix was not to force them stable but to
+stop *deriving structure* from them — hence `query_timings`, whose membership and
+`results` counts are deterministic while only `ms` moves.
 
 ## Run
 

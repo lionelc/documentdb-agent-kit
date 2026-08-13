@@ -64,14 +64,17 @@ volatile_fields:
   - heap_disk_reads
   - numBlocksFromCache
   - numBlocksFromDisk
-  # THIRD KNOWN LIMITATION (found when the suite first ran as part of the full
-  # test run rather than in isolation): `perf-advisor.sh` builds `slow_queries`
-  # by TIMING queries against a threshold, so it is not just the `ms` value that
-  # moves — WHICH queries qualify changes with cache warmth and machine load.
-  # Two runs of the same database disagreed on the membership (and therefore on
-  # `summary.slow_queries`). The structural findings perf-advisor reports —
-  # collections, index_health and the `collscans` patterns — remain asserted.
-  # This key removes both the list and the summary count (same key name).
+  # `perf-advisor.sh` reports query latency two ways:
+  #   * `query_timings` — EVERY probe it ran. Membership and `results` counts are
+  #     deterministic; only the measured `ms` moves. This is what the determinism
+  #     contract asserts.
+  #   * `slow_queries` — the subset over the latency threshold. Whether a query
+  #     crosses 50 ms depends on cache warmth and machine load, so its MEMBERSHIP
+  #     legitimately changes between runs. It is a measurement, not a finding.
+  #
+  # Originally `slow_queries` was the only timing output, which made the whole
+  # timing section unassertable. Splitting it (see scripts/perf-advisor.sh) means
+  # the deterministic part is now checked rather than discarded.
   - slow_queries
 
 # Lists whose ORDER is derived from a volatile metric (they are sorted by a live
@@ -85,42 +88,35 @@ order_insensitive_lists:
   - scan_mix
 
 # ---------------------------------------------------------------------------
-# Sampled count maps — {category: count} produced by a RANDOM sample.
+# Sampled values — NOW EMPTY, because the sampling was made deterministic.
 #
-# KNOWN LIMITATION (found by this very suite on its first run):
-# `data-integrity-check.sh` determines field-type consistency with
-# `$sample` (`{$sample:{size:20}}` and `{$sample:{size:min(100,count)}}`),
-# which draws a DIFFERENT random subset each run. Two consecutive runs on an
-# unchanged database reported:
-#     invoices.amount  {"number": 87, "string": 13}
-#     invoices.amount  {"number": 85, "string": 15}
+# History (kept deliberately: it is the evidence that this suite works).
+# This scenario found two real nondeterminism bugs on its very first run:
 #
-# The *finding* is stable and correct — `amount` really does hold both numbers
-# and strings — but the sampled counts are not. So the category KEYS are
-# asserted (they are the finding) and the counts are blanked.
+#   1. `data-integrity-check.sh` used `$sample` for field-type consistency, so
+#      two runs on an UNCHANGED database disagreed on the counts:
+#          invoices.amount  {"number": 87, "string": 13}
+#          invoices.amount  {"number": 85, "string": 15}
 #
-# FOLLOW-UP (tracked, not silently accepted): make the sampling deterministic
-# — e.g. sort by _id and take the first N, or scan the whole collection for
-# small ones — so the counts become stable too. Until then this normalisation
-# documents exactly what is and is not guaranteed.
+#   2. `document-bloat-advisor.sh` used `$sample` for `dominant_fields`, so the
+#      average field sizes wobbled:
+#          "body:4002B,notes:2002B,title:13B"
+#          "body:4002B,notes:2002B,title:12B"
+#
+# Both were initially NORMALISED AWAY here (counts and byte sizes blanked) and
+# recorded as follow-ups. They have since been FIXED at the source: both scripts
+# now use a deterministic sampler — half the documents from each end of `_id`
+# order — instead of `$sample`. Head+tail rather than head-only is deliberate:
+# mixed types usually come from schema drift over time, so the oldest and newest
+# documents are exactly where the disagreement lives.
+#
+# Verified after the fix: 3 consecutive runs are byte-identical, with the
+# findings still detected (invoices.amount {"number": 86, "string": 14};
+# dominant_fields "body:4002B,notes:2002B,title:12B").
+#
+# These lists are kept — empty — so that re-introducing a normalisation is a
+# visible, reviewable change rather than a silent one.
 # ---------------------------------------------------------------------------
-sampled_count_maps:
-  - types
+sampled_count_maps: []
 
-# ---------------------------------------------------------------------------
-# Sampled size strings — a summary string containing sampled byte sizes.
-#
-# SECOND KNOWN LIMITATION (also found by this suite on first use):
-# `document-bloat-advisor.sh` derives `dominant_fields` from a document
-# *sample*, so average field sizes wobble:
-#     "body:4002B,notes:2002B,title:13B"
-#     "body:4002B,notes:2002B,title:12B"
-#
-# The finding — which fields dominate, and in what order (body > notes > title,
-# hence recommended_split_field: body) — is stable and is still asserted. Only
-# the sampled byte numbers are blanked.
-#
-# FOLLOW-UP: same fix as above — deterministic sampling would stabilise these.
-# ---------------------------------------------------------------------------
-sampled_size_strings:
-  - dominant_fields
+sampled_size_strings: []

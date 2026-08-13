@@ -110,11 +110,28 @@ while IFS=$'\t' read -r coll heap toast total; do
     if [[ "$over" == "1" ]]; then
         flagged=$((flagged+1))
         total_toast=$(( total_toast + toast ))
-        # MongoDB avgObjSize + dominant top-level fields (sampled)
+        # MongoDB avgObjSize + dominant top-level fields.
+        # Deterministic sampler (head+tail of _id order), NOT `$sample`:
+        # a random subset made the reported average field sizes wobble between
+        # runs (measured: "title:13B" vs "title:12B" on an unchanged database),
+        # which made the advisor's output impossible to diff.
         FIELDS=$(run_mongosh '
+            function detSample(coll, size) {
+                var half = Math.ceil(size / 2);
+                var head = db[coll].find().sort({ _id: 1 }).limit(half).toArray();
+                var tail = db[coll].find().sort({ _id: -1 }).limit(size - half).toArray();
+                var seen = {}, picked = [];
+                head.concat(tail).forEach(function (d) {
+                    var k = String(d._id);
+                    if (seen[k]) return;
+                    seen[k] = 1;
+                    picked.push(d);
+                });
+                return picked;
+            }
             var s = db.'"$coll"'.stats();
             var avg = s.avgObjSize || 0;
-            var docs = db.'"$coll"'.aggregate([{$sample:{size:20}}]).toArray();
+            var docs = detSample("'"$coll"'", 20);
             var acc = {};
             docs.forEach(function(doc){
                 Object.keys(doc).forEach(function(k){
@@ -126,7 +143,9 @@ while IFS=$'\t' read -r coll heap toast total; do
             });
             var n = docs.length || 1;
             var arr = Object.keys(acc).map(function(k){ return {f:k, avg:Math.round(acc[k]/n)}; });
-            arr.sort(function(a,b){ return b.avg - a.avg; });
+            // Sort by size DESC, then by field name ASC so equal-sized fields
+            // never swap places between runs.
+            arr.sort(function(a,b){ return (b.avg - a.avg) || (a.f < b.f ? -1 : a.f > b.f ? 1 : 0); });
             print("AVG " + avg);
             arr.slice(0,3).forEach(function(x){ print("FLD " + x.f + " " + x.avg); });
         ')

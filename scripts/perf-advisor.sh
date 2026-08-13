@@ -124,7 +124,8 @@ fi
 if [[ "$JSON" == "1" ]]; then
     # Mongo-layer findings per database (index health, COLLSCAN audit, slow queries).
     read -r -d '' MONGO_JSON_JS <<'JS'
-var out = { db: db.getName(), collections: [], index_health: [], collscans: [], slow_queries: [] };
+var out = { db: db.getName(), collections: [], index_health: [], collscans: [],
+            query_timings: [], slow_queries: [] };
 var colls = db.getCollectionNames().sort();
 
 // --- overview + index health ---
@@ -153,6 +154,14 @@ colls.forEach(function(c) {
 });
 
 // --- COLLSCAN audit (same logic as the human report) ---
+// probeDoc() picks the FIRST document by _id rather than `findOne()`, which
+// returns an arbitrary document. The probe VALUES are taken from this document,
+// so an arbitrary pick made the audit nondeterministic: a numeric probe built
+// from `val/2` scanned a different fraction of the collection depending on
+// which document turned up, which changed both `docs_scanned` and — because
+// PostgreSQL costs the two plans differently — sometimes the chosen plan, and
+// therefore whether the query was reported as a collection scan at all.
+function probeDoc(c){ var a=db[c].find().sort({_id:1}).limit(1).toArray(); return a.length?a[0]:null; }
 function effectiveIndex(node){ var g=0; while(node&&g++<50){ if(node.stage==="COLLSCAN")return "__COLLSCAN__"; if(node.stage==="IXSCAN")return node.indexName||"?"; node=node.inputStage||(node.inputStages?node.inputStages[0]:null);} return null; }
 function testQuery(coll, field, label, filter, indexedFields){
     try {
@@ -165,7 +174,7 @@ function testQuery(coll, field, label, filter, indexedFields){
 }
 colls.forEach(function(c) {
     var count=db[c].estimatedDocumentCount(); if (count<10) return;
-    var sample=db[c].findOne(); if (!sample) return;
+    var sample=probeDoc(c); if (!sample) return;
     var indexedFields={}; db[c].getIndexes().forEach(function(ix){var k=Object.keys(ix.key||{}); if(k.length)indexedFields[k[0]]=true;});
     Object.keys(sample).filter(function(k){return k!=="_id";}).forEach(function(field){
         var val=sample[field];
@@ -175,13 +184,33 @@ colls.forEach(function(c) {
     });
 });
 
-// --- query timing (report anything >50ms) ---
-function timeQuery(coll,label,fn){ var s=Date.now(); var n=0; try{n=fn();}catch(e){n=-1;} var ms=Date.now()-s; if(ms>50) out.slow_queries.push({collection:coll, query:label, ms:ms, results:n}); }
+// --- query timing ---
+//
+// `query_timings` records EVERY probe that was run, whether fast or slow. Its
+// membership is therefore deterministic: the same database always yields the
+// same set of probes in the same order, and only the measured `ms` moves.
+//
+// `slow_queries` is the >threshold subset, kept for backward compatibility. It
+// is INHERENTLY volatile — whether a query crosses 50 ms depends on cache
+// warmth and machine load, so the same database can produce different
+// membership on two consecutive runs (measured). Treat it as a measurement,
+// not a finding; filter `query_timings` by `ms` yourself if you need a
+// different threshold.
+var SLOW_MS = 50;
+function timeQuery(coll,label,fn){
+    var s=Date.now(); var n=0; try{n=fn();}catch(e){n=-1;} var ms=Date.now()-s;
+    out.query_timings.push({collection:coll, query:label, ms:ms, results:n});
+    if (ms>SLOW_MS) out.slow_queries.push({collection:coll, query:label, ms:ms, results:n});
+}
 colls.forEach(function(c){
     var count=db[c].estimatedDocumentCount(); if (count<100) return;
-    var sample=db[c].findOne(); if (!sample) return;
+    var sample=probeDoc(c); if (!sample) return;
     timeQuery(c,"countDocuments()",function(){return db[c].countDocuments();});
-    var sf=Object.keys(sample).filter(function(k){return k!=="_id";}).find(function(f){return typeof sample[f]==="string"&&sample[f].length<50;});
+    // Pick the probe field deterministically: `findOne()` key order is stable
+    // for a given document, but sort the candidates anyway so the chosen field
+    // cannot depend on storage-layer key ordering.
+    var sf=Object.keys(sample).filter(function(k){return k!=="_id";}).sort()
+             .find(function(f){return typeof sample[f]==="string"&&sample[f].length<50;});
     if (sf){ var v=sample[sf];
         timeQuery(c,"find({"+sf+":...})",function(){return db[c].find(JSON.parse("{\""+sf+"\":\""+v+"\"}")).count();});
         timeQuery(c,"aggregate $group by "+sf,function(){return db[c].aggregate([{$group:{_id:"$"+sf,n:{$sum:1}}}]).toArray().length;});
@@ -189,7 +218,12 @@ colls.forEach(function(c){
 });
 
 out.summary = { collections: out.collections.length, index_health_findings: out.index_health.length,
-                collscan_patterns: out.collscans.length, slow_queries: out.slow_queries.length };
+                collscan_patterns: out.collscans.length,
+                // deterministic: how many probes ran
+                query_probes: out.query_timings.length,
+                // volatile: how many crossed the latency threshold this run
+                slow_queries: out.slow_queries.length,
+                slow_threshold_ms: SLOW_MS };
 print("MONGOJSON " + JSON.stringify(out));
 JS
 
@@ -392,8 +426,9 @@ colls.forEach(function(c) {
     if (count < 10) return; // skip tiny collections
     print("  Testing " + c + " (" + count + " docs)...");
 
-    // Sample a document to discover fields
-    var sample = db[c].findOne();
+    // Sample a document to discover fields. First-by-_id, not findOne(): an
+    // arbitrary document gives arbitrary probe values and an unstable report.
+    var sample = db[c].find().sort({_id:1}).limit(1).toArray()[0];
     if (!sample) return;
     var fields = Object.keys(sample).filter(function(k) { return k !== "_id"; });
 
@@ -452,8 +487,9 @@ colls.forEach(function(c) {
     if (count < 100) return;
     print("  ── " + c + " (" + count + " docs) ──");
 
-    // Sample to get realistic filter values
-    var sample = db[c].findOne();
+    // Sample to get realistic filter values (first-by-_id, so the same database
+    // always produces the same probes)
+    var sample = db[c].find().sort({_id:1}).limit(1).toArray()[0];
     if (!sample) return;
 
     // Test count (full scan baseline)
