@@ -36,8 +36,12 @@ RUN set -eux; \
     apt-get update; \
     apt-get install -y --no-install-recommends \
         python3 python3-pip python3-venv ca-certificates curl jq procps \
-        tar gzip unzip zip which; \
+        tar gzip unzip zip; \
     rm -rf /var/lib/apt/lists/*
+# NOTE: `which` is deliberately absent from that list. It is not a package on
+# this base (it ships inside debianutils) and asking for it fails the whole
+# apt transaction with "Unable to locate package which". The binary is already
+# present at /usr/bin/which.
 
 # ---------------------------------------------------------------------------
 # mongosh. NOT OPTIONAL, and not present upstream.
@@ -57,11 +61,29 @@ RUN set -eux; \
     rm -rf /tmp/mongosh.tgz "/tmp/mongosh-${MONGOSH_VERSION}-linux-x64"; \
     mongosh --version
 
-# Verifier dependencies, pinned so the benchmark is reproducible.
+# ---------------------------------------------------------------------------
+# Verifier dependencies, installed from VENDORED WHEELS with no network.
+#
+# `.wheels/` is populated on the host by shared/base/vendor-wheels.sh before
+# `docker build` runs (see build.sh). Two reasons this is right, not a hack:
+#   * files.pythonhosted.org is not reachable from Docker's VM on this network,
+#     though the host can reach it;
+#   * the benchmark promises the agent NO INTERNET during grading, and a pinned
+#     wheel set makes the image reproducible when a fresh PyPI resolution months
+#     later might not be.
+#
+# --no-index makes the guarantee enforceable: if a wheel is missing the build
+# FAILS rather than silently reaching out to the network.
+#
+# No --break-system-packages: this base is Ubuntu 22.04 with pip 22.x, which
+# does not have that flag (it arrived in pip 23 for PEP 668). Jammy is not
+# externally-managed, so a plain install is correct here.
+# ---------------------------------------------------------------------------
+COPY .wheels /opt/wheels
 # psycopg is what makes check_engine.py possible: it reads the PostgreSQL
 # engine underneath the Mongo API, a second observation plane the Cosmos
 # benchmark does not have.
-RUN python3 -m pip install --no-cache-dir --break-system-packages \
+RUN python3 -m pip install --no-cache-dir --no-index --find-links=/opt/wheels \
         pytest==8.3.3 \
         pytest-json-ctrf==0.3.5 \
         requests==2.32.3 \
@@ -73,7 +95,7 @@ RUN python3 -m pip install --no-cache-dir --break-system-packages \
 # verifier dependency by pip-installing a different pymongo into system
 # site-packages. runner.sh prefers /opt/verifier-venv/bin/python.
 RUN python3 -m venv /opt/verifier-venv && \
-    /opt/verifier-venv/bin/pip install --no-cache-dir \
+    /opt/verifier-venv/bin/pip install --no-cache-dir --no-index --find-links=/opt/wheels \
         pytest==8.3.3 \
         pytest-json-ctrf==0.3.5 \
         requests==2.32.3 \
@@ -101,6 +123,16 @@ RUN set -eux; \
     rm -rf /tmp/ces; \
     chmod +x /ces_activate.sh /entry.sh /save.sh /restore.sh \
              /opt/activate_python.sh /opt/safe_save.sh 2>/dev/null || true
+
+# ---------------------------------------------------------------------------
+# The agent kit's skills, for the TREATMENT arm.
+#
+# shared/ces/runner.sh copies these into the agent's personal skills directory
+# when SKILLS_ARM=kit, and installs nothing when SKILLS_ARM=control. They are
+# staged into the build context by build.sh rather than widening the context to
+# the whole repository.
+# ---------------------------------------------------------------------------
+COPY .skills /opt/documentdb-agent-kit/skills
 
 RUN mkdir -p /logs/verifier /app /reference /output /drop /agent /testbed && \
     chmod -R 1777 /logs /output /drop /agent /testbed /app /reference 2>/dev/null || true

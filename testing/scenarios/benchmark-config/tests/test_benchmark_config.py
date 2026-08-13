@@ -255,3 +255,195 @@ def test_runner_fails_loudly_when_the_treatment_arm_has_no_skills():
         "the agent runner must abort when SKILLS_ARM=kit but the skills are "
         "missing; otherwise the treatment arm silently becomes a control arm"
     )
+
+
+# ---------------------------------------------------------------------------
+# interpreter compatibility
+# ---------------------------------------------------------------------------
+def test_verifier_modules_parse_under_python_310():
+    """The task image is Ubuntu 22.04 => CPython 3.10.
+
+    This caught a real bug: an f-string using 3.12-only nested quoting parsed
+    fine on the dev machine (3.12) and blew up inside the container with
+    `SyntaxError: unterminated string literal`, which only surfaced after a
+    full image build and run. Feature-version parsing catches it in CI in
+    milliseconds instead.
+    """
+    import ast
+
+    modules = sorted((VERIFIER).glob("*.py"))
+    assert modules, "no verifier modules found"
+    failures = []
+    for path in modules:
+        try:
+            ast.parse(path.read_text(), filename=str(path),
+                      feature_version=(3, 10))
+        except SyntaxError as exc:
+            failures.append(f"{path.name}:{exc.lineno}: {exc.msg}")
+    assert not failures, (
+        "verifier modules are not valid Python 3.10 (the task image's "
+        "interpreter):\n  " + "\n  ".join(failures)
+    )
+
+
+def test_reference_app_parses_under_python_310():
+    import ast
+
+    app = TASK / "environment" / "reference" / "app.py"
+    try:
+        ast.parse(app.read_text(), filename=str(app), feature_version=(3, 10))
+    except SyntaxError as exc:
+        pytest.fail(f"reference app is not valid Python 3.10: "
+                    f"line {exc.lineno}: {exc.msg}")
+
+
+def test_verifier_has_no_catastrophically_backtracking_regexes():
+    """Guard against a real bug that cost a full build-and-run cycle to find.
+
+    check_source.py originally detected per-request client construction with a
+    regex containing NESTED QUANTIFIERS over lines:
+
+        (?:[^\\n]*\\n(?:[ \\t]+[^\\n]*\\n)*?)*?
+
+    On a 6 KB file it never returned — the verifier hung for minutes and the
+    run had to be killed. It is now done with `ast`, which is exact and ~1000x
+    faster.
+
+    A quantifier applied to a group that itself contains a quantifier is the
+    signature of the problem, so it is banned outright in this directory.
+    """
+    import re as _re
+
+    # A group ending in a quantifier, immediately followed by another quantifier.
+    nested = _re.compile(r"\)[*+]\??[*+]|\*\?\)\*|\)\*\?\)")
+    offenders = []
+    for path in sorted(VERIFIER.glob("*.py")):
+        for lineno, line in enumerate(path.read_text().splitlines(), 1):
+            stripped = line.strip()
+            if stripped.startswith("#") or '"""' in stripped:
+                continue
+            if nested.search(line):
+                offenders.append(f"{path.name}:{lineno}")
+    assert not offenders, (
+        "possible catastrophic-backtracking regex (a quantified group followed "
+        f"by another quantifier) at {offenders}. Use ast for source analysis."
+    )
+
+
+# ---------------------------------------------------------------------------
+# credential detection must not fire on correct code
+# ---------------------------------------------------------------------------
+def _credential_findings(source: str) -> list[str]:
+    """Apply check_skills.py's credential patterns to a source string."""
+    import re as _re
+    import importlib.util
+
+    spec = importlib.util.spec_from_file_location(
+        "_cs", VERIFIER / "check_skills.py")
+    mod = importlib.util.module_from_spec(spec)
+    # check_skills imports pytest at module scope; the test venv has it.
+    spec.loader.exec_module(mod)
+    out = []
+    for pattern, label in mod._CREDENTIAL_PATTERNS:
+        for m in _re.finditer(pattern, source):
+            out.append(f"{label}: {m.group(0)[:40]}")
+    return out
+
+
+def test_credential_check_does_not_fire_on_env_driven_uris():
+    """A false positive here is worse than no check at all.
+
+    This exact pattern failed the reference implementation: the URI is an
+    f-string TEMPLATE reading credentials from the environment — the correct
+    thing to do — but the password character class matched the interpolation
+    placeholder and flagged it as a hardcoded secret.
+    """
+    good = '''
+from urllib.parse import quote_plus
+user = os.environ["DOCUMENTDB_USER"]
+password = os.environ["DOCUMENTDB_PASSWORD"]
+uri = f"mongodb://{quote_plus(user)}:{quote_plus(password)}@{host}:{port}/"
+uri2 = "mongodb://%s:%s@%s" % (user, password, host)
+pwd = os.getenv("DOCUMENTDB_PASSWORD")
+'''
+    assert not _credential_findings(good), (
+        "the credential check fires on correct, env-driven code: "
+        f"{_credential_findings(good)}"
+    )
+
+
+def test_credential_check_still_catches_real_secrets():
+    """The other half: a check that never fires is worthless."""
+    bad_uri = 'client = MongoClient("mongodb://admin:Sup3rSecret@db:10260/")'
+    bad_literal = 'password = "Sup3rSecret"'
+    assert _credential_findings(bad_uri), "missed a URI-embedded password"
+    assert _credential_findings(bad_literal), "missed a hardcoded password literal"
+
+
+# ---------------------------------------------------------------------------
+# singleton-client detection
+# ---------------------------------------------------------------------------
+def _client_offenders(tmp_path, source: str) -> list[str]:
+    import importlib.util
+
+    spec = importlib.util.spec_from_file_location(
+        "_csrc", VERIFIER / "check_source.py")
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    f = tmp_path / "app.py"
+    f.write_text(source)
+    return mod._client_calls_inside_functions([f])
+
+
+def test_singleton_client_detector_accepts_module_level_client(tmp_path):
+    good = '''
+from pymongo import MongoClient
+client = MongoClient("mongodb://host")
+db = client["x"]
+
+@app.get("/orders")
+def list_orders():
+    return list(db.orders.find({}))
+'''
+    assert not _client_offenders(tmp_path, good)
+
+
+def test_singleton_client_detector_catches_client_hidden_in_a_helper(tmp_path):
+    """Found by a negative control, not by inspection.
+
+    An earlier version of this check only looked inside route-decorated
+    functions. A deliberately naive submission that built a client in a plain
+    helper called by every route PASSED, even though it creates a new
+    connection pool per request — the exact anti-pattern the check exists for.
+    """
+    sneaky = '''
+from pymongo import MongoClient
+
+def coll():
+    c = MongoClient("mongodb://host")
+    return c["db"]["orders"]
+
+@app.get("/orders")
+def list_orders():
+    return list(coll().find({}))
+'''
+    offenders = _client_offenders(tmp_path, sneaky)
+    assert offenders, (
+        "a MongoClient built inside a helper called per request was not "
+        "detected; the check would pass a submission that creates a new "
+        "connection pool on every call"
+    )
+
+
+def test_singleton_client_detector_allows_a_memoised_factory(tmp_path):
+    """A cached factory really is a singleton, and rejecting it would punish a
+    legitimate pattern."""
+    cached = '''
+from functools import lru_cache
+from pymongo import MongoClient
+
+@lru_cache(maxsize=1)
+def get_client():
+    return MongoClient("mongodb://host")
+'''
+    assert not _client_offenders(tmp_path, cached)

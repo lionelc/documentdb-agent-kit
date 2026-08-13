@@ -23,6 +23,7 @@ The rules asserted here come from the kit's `documentdb-driver`,
 """
 from __future__ import annotations
 
+import ast
 import re
 
 import pytest
@@ -31,6 +32,67 @@ import pytest
 def _need(sdk: str, *want: str):
     if sdk not in want:
         pytest.skip(f"does not apply to {sdk} (only: {', '.join(want)})")
+
+
+ROUTE_DECORATORS = {"get", "post", "put", "delete", "patch", "route"}
+# Decorators that make a per-call construction safe because the result is
+# memoised, or that mark application start-up.
+CACHING_DECORATORS = {"lru_cache", "cache", "cached_property",
+                      "on_event", "lifespan", "before_first_request"}
+
+
+def _client_calls_inside_functions(source_files) -> list[str]:
+    """Find MongoClient constructions that are NOT module-level singletons.
+
+    Uses the AST rather than a regex. The regex version of this check had
+    catastrophic backtracking — nested quantifiers over lines — and hung the
+    verifier for minutes on a 6 KB file. Parsing is exact and ~1000x faster.
+
+    WHY "ANY FUNCTION" AND NOT "ANY ROUTE HANDLER":
+    an earlier version only looked inside route-decorated functions, and a
+    deliberately naive submission slipped through by hiding the construction in
+    a helper:
+
+        def coll():
+            c = MongoClient(...)          # a NEW pool on every request
+            return c[db][collection]
+
+        @app.get("/orders")
+        def list_orders(): return list(coll().find(...))
+
+    That is the exact anti-pattern the check exists to catch. A correct
+    singleton is built once at module import (or behind an explicit cache /
+    start-up hook), so anything else is reported.
+    """
+    offenders = []
+    for path in source_files:
+        try:
+            tree = ast.parse(path.read_text(encoding="utf-8", errors="ignore"))
+        except (SyntaxError, OSError):
+            continue
+
+        # Map every node to its enclosing function, if any.
+        for node in ast.walk(tree):
+            if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                continue
+
+            exempt = False
+            for dec in node.decorator_list:
+                call = dec.func if isinstance(dec, ast.Call) else dec
+                name = getattr(call, "attr", None) or getattr(call, "id", None)
+                if name in CACHING_DECORATORS:
+                    exempt = True
+                    break
+            if exempt:
+                continue
+
+            for inner in ast.walk(node):
+                if (isinstance(inner, ast.Call)
+                        and isinstance(inner.func, ast.Name)
+                        and inner.func.id == "MongoClient"):
+                    offenders.append(
+                        f"{path.name}:{inner.lineno} in {node.name}()")
+    return offenders
 
 
 class TestClientLifecycle:
@@ -44,21 +106,16 @@ class TestClientLifecycle:
     check_engine.py checks the runtime consequence; this names the cause.
     """
 
-    def test_client_is_not_constructed_per_request(self, sdk, source_text):
+    def test_client_is_not_constructed_per_request(self, sdk, source_files):
         _need(sdk, "python")
-        # A client built inside a request handler is the anti-pattern. Look for
-        # a MongoClient(...) construction indented under a decorated route.
-        route_then_client = re.compile(
-            r"@\w+\.(?:get|post|put|delete|route)\([^)]*\)\s*"
-            r"(?:async\s+)?def\s+\w+\([^)]*\):"
-            r"(?:[^\n]*\n(?:[ \t]+[^\n]*\n)*?)*?[ \t]+\w*\s*=\s*MongoClient\s*\(",
-            re.MULTILINE,
-        )
-        assert not route_then_client.search(source_text), (
-            "A MongoClient is constructed inside a request handler. Create one "
-            "client at application start-up and reuse it: each client owns a "
-            "connection pool, so per-request construction exhausts server "
-            "connections and defeats pooling."
+        offenders = _client_calls_inside_functions(source_files)
+        assert not offenders, (
+            f"A MongoClient is constructed inside a function "
+            f"({', '.join(offenders[:5])}), so a new connection pool is created "
+            f"on every call. Build ONE client at application start-up and reuse "
+            f"it — per-request construction exhausts server connections and "
+            f"defeats pooling entirely. (A memoised factory, e.g. @lru_cache, "
+            f"is also accepted.)"
         )
 
     def test_a_client_is_constructed_somewhere(self, sdk, source_text):

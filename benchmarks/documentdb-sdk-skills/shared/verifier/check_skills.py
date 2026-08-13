@@ -13,11 +13,18 @@ import pytest
 # The base image generates a password at container start and exports it. Any
 # literal that looks like a credential in source is therefore a real finding.
 _CREDENTIAL_PATTERNS = [
-    # mongodb://user:password@host  — a password embedded in a URI literal
-    (r"mongodb(?:\+srv)?://[^\s\"']*:[^\s\"'@/]{3,}@",
+    # mongodb://user:password@host — a password embedded in a URI LITERAL.
+    #
+    # The password class excludes { } $ % + on purpose: those characters mean
+    # the value is being INTERPOLATED, e.g.
+    #     f"mongodb://{quote_plus(user)}:{quote_plus(password)}@{host}:{port}/"
+    # which is the CORRECT pattern (credentials from the environment), not a
+    # leak. Without this exclusion the check fails every well-written
+    # submission — it did exactly that to the reference implementation.
+    (r"mongodb(?:\+srv)?://[^\s\"']*:[^\s\"'@/{}$%+]{3,}@",
      "a connection URI with an embedded password"),
     # password = "literal"  (not os.environ / getenv / a format placeholder)
-    (r"(?i)\b(?:password|passwd|pwd)\s*=\s*[\"'][^\"'{}$<>]{4,}[\"']",
+    (r"(?i)\b(?:password|passwd|pwd)\s*=\s*[\"'][^\"'{}$<>%+]{4,}[\"']",
      "a hardcoded password literal"),
 ]
 

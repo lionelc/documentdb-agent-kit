@@ -46,15 +46,20 @@ fail() {
 # ---------------------------------------------------------------------
 section "1. Start DocumentDB"
 # ---------------------------------------------------------------------
+# The password is generated HERE, in the parent, not inside start-documentdb.
+# A child process cannot export a variable back to its caller, and both the
+# agent's app and the verifier must end up with the same credential.
+# It is generated per container and never baked into the image — check_skills.py
+# fails any submission with a hardcoded credential, so the benchmark must not
+# model bad practice itself.
+if [ -z "${DOCUMENTDB_PASSWORD:-}" ]; then
+    DOCUMENTDB_PASSWORD="Bench$(head -c 12 /dev/urandom | od -An -tx1 | tr -d ' \n')"
+fi
+export DOCUMENTDB_PASSWORD
+
 if ! start-documentdb; then
     fail "DocumentDB did not start. See $LOG_DIR/documentdb.log"
 fi
-# start-documentdb generates DOCUMENTDB_PASSWORD when unset; re-derive it here
-# so both the app and the verifier see the same value.
-if [ -z "${DOCUMENTDB_PASSWORD:-}" ]; then
-    fail "DOCUMENTDB_PASSWORD was not exported by start-documentdb"
-fi
-export DOCUMENTDB_PASSWORD
 
 # ---------------------------------------------------------------------
 section "2. Check the agent's deliverables"
@@ -120,6 +125,21 @@ section "6. Grade"
 PY=/opt/verifier-venv/bin/python
 [ -x "$PY" ] || PY=python3
 
+# The task's own checks are copied INTO /verifier before running.
+#
+# pytest only applies a conftest.py to tests at or below its directory, so a
+# checks.py sitting in /tests cannot see the shared fixtures in
+# /verifier/conftest.py — it fails with "fixture 'sdk' not found". Moving the
+# file under /verifier puts it in the same fixture scope as everything else,
+# which is also conceptually right: the verifier owns grading.
+if [ -f /tests/checks.py ]; then
+    cp /tests/checks.py /verifier/task_checks.py
+    TASK_CHECKS=/verifier/task_checks.py
+else
+    TASK_CHECKS=""
+    echo "[runner] WARNING: /tests/checks.py not found; task-specific checks skipped" >&2
+fi
+
 "$PY" -m pytest \
     --ctrf "$LOG_DIR/ctrf.json" \
     -rA -v \
@@ -130,7 +150,7 @@ PY=/opt/verifier-venv/bin/python
     /verifier/check_engine.py \
     /verifier/check_source.py \
     /verifier/check_skills.py \
-    /tests/checks.py \
+    $TASK_CHECKS \
     2>&1 | tee "$LOG_DIR/pytest.log"
 
 PYTEST_RC=${PIPESTATUS[0]}

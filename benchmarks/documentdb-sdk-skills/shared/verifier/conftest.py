@@ -70,10 +70,13 @@ def load_contract() -> dict:
     scenario = os.environ.get("SCENARIO", "orders")
     path = CONTRACTS_DIR / f"{scenario}.json"
     if not path.is_file():
+        available = (
+            sorted(p.name for p in CONTRACTS_DIR.glob("*.json"))
+            if CONTRACTS_DIR.is_dir() else "contracts dir missing"
+        )
         raise RuntimeError(
             f"Scenario contract not found: {path}. SCENARIO={scenario!r}. "
-            f"Available: {sorted(p.name for p in CONTRACTS_DIR.glob('*.json'))
-                          if CONTRACTS_DIR.is_dir() else 'contracts dir missing'}"
+            f"Available: {available}"
         )
     return json.loads(path.read_text())
 

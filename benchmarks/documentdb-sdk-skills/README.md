@@ -4,10 +4,10 @@ A **skill-efficacy benchmark**: does a coding agent obey Azure DocumentDB best
 practices when it merely *has* the [documentdb-agent-kit](../../README.md)
 skills installed?
 
-> **Status: not yet published.** The images build locally and the benchmark is
-> registered-ready, but it has not been submitted to MSBench. See
-> [Verification status](#verification-status) for exactly what is and is not
-> proven.
+> **Status: built and verified locally; not yet submitted to MSBench.** Both
+> images build offline, the oracle scores 1, and both an empty and a
+> working-but-naive submission score 0. See
+> [Verification status](#verification-status).
 
 ## The question
 
@@ -210,7 +210,7 @@ msbench-cli run --benchmark documentdb-sdk-skills \
 
 ## Verification status
 
-Honest accounting of what has and has not been proven:
+Verified by running, not by inspection:
 
 | Claim | Status |
 |---|---|
@@ -218,16 +218,47 @@ Honest accounting of what has and has not been proven:
 | Task follows the Harbor layout | ✅ asserted by tests |
 | Instruction contains no hints | ✅ asserted (mutation-verified) |
 | Cost metrics agree with the Loop B module | ✅ asserted (mutation-verified) |
-| Harvester works on a real session store | ✅ run against a live store |
-| All shell entrypoints parse | ✅ `bash -n` |
-| **Images build** | ⬜ **not yet** — the Docker daemon was unavailable |
-| **Oracle scores 1** | ⬜ **not yet** — blocked on the build |
-| **Empty submission scores 0** | ⬜ **not yet** — blocked on the build |
+| Verifier parses as Python 3.10 (the image's interpreter) | ✅ asserted in CI |
+| Images build | ✅ base + task, offline from vendored wheels |
+| **Oracle scores 1** | ✅ **REWARD=1, 31 checks passed** |
+| **Empty submission scores 0** | ✅ **REWARD=0** |
+| **A working-but-naive app scores 0** | ✅ **REWARD=0, 10 checks failed** |
+| Cost metrics emitted | ✅ `custom_metrics.json` with per-category counts |
 | Submitted to MSBench | ⬜ not yet |
 
-The oracle and empty-submission controls are wired into
-[`loop-c-benchmark.yml`](../../.github/workflows/loop-c-benchmark.yml) and run
-on `workflow_dispatch`.
+### The discrimination that matters
+
+An empty `/app` failing is a weak result — it proves only that the harness
+notices missing files. The real test is a submission that **works**: correct
+HTTP behaviour, correct persistence, no DocumentDB best practices.
+
+That app passes **every** API and behavioural check and still scores 0, failing
+exactly the ten skill-specific ones:
+
+```
+check_documentdb  type discriminator, schemaVersion, queryable timestamp,
+                  secondary index exists, queried field is indexed
+check_engine      query is not a full scan, scan amplification is low
+check_source      connection options set explicitly, TLS not hardcoded off,
+                  client is not constructed per request
+```
+
+That is the benchmark working as intended: it measures best practices, not
+basic competence.
+
+### Three real bugs the controls found
+
+None of these would have been caught by inspection, and all three would have
+produced a *wrong published number*:
+
+| Bug | Consequence | Now guarded by |
+|---|---|---|
+| `check_source.py` regex had catastrophic backtracking (nested quantifiers over lines) | verifier **hung for minutes** on a 6 KB file; replaced with `ast` (~1000× faster) | a CI test banning quantified-group-followed-by-quantifier |
+| Credential check matched an f-string **template** (`mongodb://{quote_plus(user)}:{quote_plus(password)}@…`) | **failed the reference implementation** — a false positive would fail every correct submission | a CI test asserting env-driven URIs pass and real secrets still fail |
+| Singleton check only looked inside route handlers | the naive app hid its per-request client in a helper and **passed** | a CI test with the exact helper pattern |
+
+The third was found by the naive-submission control, which is precisely what
+negative controls are for.
 
 ## What is *not* here
 

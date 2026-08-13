@@ -33,19 +33,42 @@ if pgrep -f "documentdb" >/dev/null 2>&1 && \
 fi
 
 echo "[start-documentdb] starting (log: $LOG)"
+# The upstream image's ENTRYPOINT is
+#   /bin/bash -c '/home/documentdb/gateway/scripts/emulator_entrypoint.sh "$@"'
+# and the image runs as the unprivileged `documentdb` user (uid 1000).
+#
+# We reset ENTRYPOINT and switched to root in the Dockerfile so Harbor can drive
+# tests/test.sh and the verifier can write /logs. But PostgreSQL REFUSES to run
+# as root ("initdb: cannot be run as root"), so the database must be started
+# back under `documentdb` while everything else stays root. This is the same
+# split the Cosmos benchmark makes for its emulator user.
 ENTRY=""
-for candidate in /usr/local/bin/entrypoint.sh /entrypoint.sh /usr/local/bin/start.sh; do
+for candidate in \
+        /home/documentdb/gateway/scripts/emulator_entrypoint.sh \
+        /usr/local/bin/entrypoint.sh \
+        /entrypoint.sh; do
     [ -x "$candidate" ] && { ENTRY="$candidate"; break; }
 done
 
 if [ -z "$ENTRY" ]; then
     echo "[start-documentdb] ERROR: no entrypoint script found in the image." >&2
-    echo "[start-documentdb] Looked for: /usr/local/bin/entrypoint.sh /entrypoint.sh /usr/local/bin/start.sh" >&2
+    echo "[start-documentdb] Looked for: /home/documentdb/gateway/scripts/emulator_entrypoint.sh" >&2
+    echo "[start-documentdb]             /usr/local/bin/entrypoint.sh /entrypoint.sh" >&2
     exit 1
 fi
 
-USERNAME="$USER_" PASSWORD="$DOCUMENTDB_PASSWORD" \
-    nohup "$ENTRY" >"$LOG" 2>&1 &
+DB_RUN_USER="${DOCUMENTDB_RUN_USER:-documentdb}"
+if id "$DB_RUN_USER" >/dev/null 2>&1 && [ "$(id -u)" = "0" ]; then
+    # The data directory must belong to the user that will own the server
+    # process, or initdb refuses to touch it.
+    chown -R "$DB_RUN_USER":"$DB_RUN_USER" /home/documentdb 2>/dev/null || true
+    su -s /bin/bash "$DB_RUN_USER" -c \
+        "USERNAME='$USER_' PASSWORD='$DOCUMENTDB_PASSWORD' nohup '$ENTRY'" \
+        >"$LOG" 2>&1 &
+else
+    USERNAME="$USER_" PASSWORD="$DOCUMENTDB_PASSWORD" \
+        nohup "$ENTRY" >"$LOG" 2>&1 &
+fi
 
 echo "[start-documentdb] waiting for the gateway to accept connections..."
 for i in $(seq 1 120); do
