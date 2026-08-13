@@ -1,0 +1,238 @@
+# documentdb-sdk-skills
+
+A **skill-efficacy benchmark**: does a coding agent obey Azure DocumentDB best
+practices when it merely *has* the [documentdb-agent-kit](../../README.md)
+skills installed?
+
+> **Status: not yet published.** The images build locally and the benchmark is
+> registered-ready, but it has not been submitted to MSBench. See
+> [Verification status](#verification-status) for exactly what is and is not
+> proven.
+
+## The question
+
+Not "is the kit good?" — unfalsifiable. This one:
+
+> Given the same task, the same model and the same environment, does an agent
+> **with** the DocumentDB skills installed produce a measurably better service
+> than one **without** — and what did each cost?
+
+## Two arms, always
+
+| Benchmark | Skills installed | Role |
+|---|---|---|
+| `documentdb-sdk-skills` | yes, discoverable, **never mentioned** | treatment |
+| `documentdb-sdk-skills-noskills` | none | control |
+
+The control arm is a **separately registered benchmark**, not a runtime flag.
+That mirrors the platform's existing `skillsbench` / `skillsbenchnoskills`
+convention.
+
+**Only the delta is publishable.** An absolute pass@k on either arm alone
+cannot be interpreted — you cannot tell a good kit from an easy task.
+
+## The organic-discovery protocol
+
+`shared/ces/runner.sh` copies the skills into the agent's personal skills
+directory as normally discoverable skills, then drives the **default** agent
+with **no hint** to use them. `instruction.md` is deliberately silent about
+indexing, ESR, connection pooling, schema versioning and type discriminators —
+a static test (`testing/scenarios/benchmark-config/`) fails the build if any of
+those words appear in it.
+
+Hinting would turn "does an installed kit get applied?" into "can the model
+follow an instruction?" — a much easier question with a much less useful answer.
+
+The instruction *does* state the scale requirement ("millions of orders", the
+customer lookup is the hot path). That is a requirement, not a hint: without it,
+choosing not to index would be a defensible engineering decision rather than a
+miss.
+
+## What gets evaluated
+
+| # | Category | Module | Strength |
+|---|---|---|---|
+| 1 | **Engine behaviour** | `check_engine.py` | ★★★ strongest |
+| 2 | **Live behaviour** | `check_behavior.py` | ★★★ |
+| 3 | Data shape & indexing | `check_documentdb.py` | ★★ structural |
+| 4 | API conformance | `check_api.py` | ★★ |
+| 5 | Security hygiene | `check_skills.py` | ★★ |
+| 6 | Client configuration | `check_source.py` | ★ static, last resort |
+
+### Why this benchmark is stronger than its Cosmos ancestor
+
+The Cosmos benchmark's own docs concede that client-side properties "a
+single-node local emulator **cannot** prove behaviorally" have to fall back to
+static source regex — its weakest grader, and ~520 lines of it.
+
+DocumentDB gives us a way out. It is MongoDB-compatible on the surface and
+**PostgreSQL underneath**, and the verifier talks to *both*. So instead of
+grepping for `create_index(` and hoping:
+
+- `explain()` through the Mongo API → was the query planned as an index scan,
+  and how many documents did it read per document returned?
+- `pg_stat_user_indexes` → did the index actually get **used**, or is it dead
+  weight costing write throughput?
+
+An agent can fake the source. It cannot fake the engine's own statistics.
+Our `check_source.py` is ~130 lines, not 520, because almost everything moved
+to a stronger rung.
+
+### The metric: scan amplification
+
+`totalDocsExamined / nReturned`.
+
+Raw "documents examined" is the **wrong** metric here — measured on DocumentDB
+Local, the planner picks an index scan even for very unselective predicates:
+
+| Query | Plan | Examined | Returned |
+|---|---|---|---|
+| `amount > 490` (selective) | IXSCAN | 760 | 760 |
+| `amount > 10` (unselective) | IXSCAN | 19,960 | 19,960 |
+
+Both are healthy: they read only rows they return. Amplification captures that
+independently of selectivity — 2000× before an index, 1× after.
+
+### Grading at realistic volume
+
+The contract seeds only 4 rows through the API, but the engine checks run
+against **20,000** filler documents loaded by the verifier
+(`bulk_filler` in `conftest.py`), followed by `ANALYZE`.
+
+This is necessary, not a workaround: on a 4-document collection a sequential
+scan genuinely *is* cheaper, PostgreSQL is right to choose it, and the oracle
+itself would fail. The task tells the agent the service runs against millions
+of orders, so the verifier must grade at a size where that statement has
+consequences.
+
+## Cost metrics
+
+MSBench's reward is binary — it says whether a submission complied, not what it
+cost. The verifier writes `$OUTPUT_DIR/custom_metrics.json` (MSBench's
+first-class per-instance hook, surfaced by
+`msbench-cli report --output report.json`) with token usage harvested from the
+Copilot CLI's own session store:
+
+| Metric | Meaning |
+|---|---|
+| `tokens_fresh_input` | input **actually billed** at the uncached rate |
+| `tokens_input` / `tokens_cache_read` | raw counts, for transparency |
+| `cache_read_share_pct` | how much of the payload was amortised by caching |
+| `ai_credits` | the money number |
+| `agent_turns` / `agent_requests` | round trips |
+| `credits_to_green` | cost of a **passing** run (absent when it failed) |
+| `checks_<category>_passed/_total` | which rung failed, per category |
+| `tokens_available` | `0` when harvesting failed — so a missing value is never read as free |
+
+**Do not quote `tokens_input` as the cost of a skill.** `cache_read_tokens` is a
+*subset* of `input_tokens`, and the skill payload is cached after first use — on
+a real session, 91% of input was cache reads. `tokens_fresh_input` is the honest
+figure.
+
+`credits_to_green` is emitted **only** for a run that passed; otherwise an agent
+that gave up early would look like the cheapest one.
+
+## Layout
+
+```
+documentdb-sdk-skills/
+├── orders.toml                       # harbor-format-curation config
+├── msbench-registration/
+│   ├── documentdb-sdk-skills/        # treatment: registry.json + loaders + dataset
+│   └── documentdb-sdk-skills-noskills/   # control
+├── shared/
+│   ├── base/Dockerfile               # DocumentDB Local + mongosh + verifier deps
+│   ├── base/start-documentdb.sh
+│   ├── ces/runner.sh                 # installs skills, un-hinted
+│   ├── contracts/orders.json         # the scenario contract
+│   └── verifier/
+│       ├── conftest.py               # contract loading, both DB clients, filler
+│       ├── check_api.py
+│       ├── check_behavior.py
+│       ├── check_documentdb.py
+│       ├── check_engine.py           # ← the differentiator
+│       ├── check_source.py
+│       ├── check_skills.py
+│       ├── harvest_metrics.py        # cost metrics -> custom_metrics.json
+│       └── runner.sh                 # reward.txt entrypoint
+└── tasks/orders-api-python/
+    ├── task.toml  instruction.md
+    ├── environment/{Dockerfile,reference/}
+    ├── solution/solve.sh             # oracle
+    └── tests/{test.sh,checks.py}
+```
+
+`registry.json` is **required** by the live platform — the Cosmos benchmark's
+registration predates it and would be rejected today.
+
+## Reward model
+
+`tests/test.sh` writes `0` or `1` to `/logs/verifier/reward.txt`. A run scores
+`1` only when **every** mandatory check passes. A CTRF report
+(`/logs/verifier/ctrf.json`) records per-check results so a failure is
+diagnosable without re-running.
+
+### No verification is skipped, deliberately
+
+The platform's own `skillsbench` config carries several
+`skip = "oracle", reason = "Non-deterministic: …"` entries. Under a **binary**
+reward one flaky check corrupts the entire signal, so `[tasks.skip-verification]`
+here is empty and a test enforces that: a check that cannot be made
+deterministic must be **removed**, not skipped.
+
+## Building and running locally
+
+```bash
+cd benchmarks/documentdb-sdk-skills
+docker build -f shared/base/Dockerfile -t documentdb-orders-base:latest .
+cd tasks/orders-api-python
+docker build -f environment/Dockerfile -t documentdb-orders-api-python:latest .
+
+# Positive control: the oracle must score 1
+docker run --rm documentdb-orders-api-python:latest \
+  bash -c '/solution/solve.sh && /tests/test.sh; cat /logs/verifier/reward.txt'
+
+# Negative control: an empty /app must score 0
+docker run --rm documentdb-orders-api-python:latest \
+  bash -c '/tests/test.sh; cat /logs/verifier/reward.txt'
+```
+
+`--backend local` lets MSBench run harbor-native benchmarks entirely on your
+machine, so the whole benchmark can be iterated **without** pushing to the
+internal registry:
+
+```bash
+pip install "msbench-cli[harbor]"
+msbench-cli run --benchmark documentdb-sdk-skills \
+  --dataset msbench-registration/documentdb-sdk-skills/dataset.jsonl \
+  --backend local
+```
+
+## Verification status
+
+Honest accounting of what has and has not been proven:
+
+| Claim | Status |
+|---|---|
+| Registration matches the live platform schema | ✅ read from the central repo; asserted by tests |
+| Task follows the Harbor layout | ✅ asserted by tests |
+| Instruction contains no hints | ✅ asserted (mutation-verified) |
+| Cost metrics agree with the Loop B module | ✅ asserted (mutation-verified) |
+| Harvester works on a real session store | ✅ run against a live store |
+| All shell entrypoints parse | ✅ `bash -n` |
+| **Images build** | ⬜ **not yet** — the Docker daemon was unavailable |
+| **Oracle scores 1** | ⬜ **not yet** — blocked on the build |
+| **Empty submission scores 0** | ⬜ **not yet** — blocked on the build |
+| Submitted to MSBench | ⬜ not yet |
+
+The oracle and empty-submission controls are wired into
+[`loop-c-benchmark.yml`](../../.github/workflows/loop-c-benchmark.yml) and run
+on `workflow_dispatch`.
+
+## What is *not* here
+
+- **The skills themselves.** They live in [`skills/`](../../skills/). This
+  benchmark measures obedience to them; it does not own them.
+- **The fast development loops.** `testing/` (deterministic) and `evals/`
+  (cross-model) are for iteration; see [`docs/TESTING.md`](../../docs/TESTING.md).
+  This is the slow, hermetic publication layer.

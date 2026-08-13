@@ -1,7 +1,8 @@
 # Testing the agent kit
 
-The kit is tested in **two loops with opposite success criteria**. Conflating
-them is the main design mistake to avoid.
+The kit is tested in **three loops**. The first two have opposite success
+criteria — conflating them is the main design mistake to avoid — and the third
+is the publication layer.
 
 | | **Loop A — deterministic** | **Loop B — non-deterministic** |
 |---|---|---|
@@ -11,6 +12,11 @@ them is the main design mistake to avoid.
 | Runtime | ~2 min, **free** | minutes to hours, **costs AI credits** |
 | Home | [`testing/`](../testing/) | [`evals/`](../evals/) |
 | CI | every PR | dispatch / monthly only |
+
+Plus **Loop C — MSBench** ([`benchmarks/`](../benchmarks/documentdb-sdk-skills/README.md)):
+a hermetic, externally-citable `pass@k` on Microsoft's benchmark platform. Slow,
+gated, and the only one that produces a number for external publication. Loops A
+and B are for iteration; Loop C is for citation.
 
 A diagnostic script is a **tool**: the same database must give the same answer
 every time. An agent is not: it must be measured as a distribution against a
@@ -208,6 +214,74 @@ Three things this table is built to stop you getting wrong:
 
 ---
 
+## Loop C — MSBench benchmark
+
+The publication layer. See
+[`benchmarks/documentdb-sdk-skills/README.md`](../benchmarks/documentdb-sdk-skills/README.md).
+
+### Free — runs on every PR
+
+```bash
+cd testing && pytest scenarios/benchmark-config scenarios/benchmark-metrics
+```
+
+Validates the registration files, the Harbor task layout, that the instruction
+contains **no solution hints**, and that the cost metrics agree with Loop B's.
+No Docker, no MSBench access, no network.
+
+### Local — needs Docker
+
+```bash
+cd benchmarks/documentdb-sdk-skills
+docker build -f shared/base/Dockerfile -t documentdb-orders-base:latest .
+cd tasks/orders-api-python
+docker build -f environment/Dockerfile -t documentdb-orders-api-python:latest .
+
+# positive control: the oracle must score 1
+docker run --rm documentdb-orders-api-python:latest \
+  bash -c '/solution/solve.sh && /tests/test.sh; cat /logs/verifier/reward.txt'
+
+# negative control: an empty /app must score 0
+docker run --rm documentdb-orders-api-python:latest \
+  bash -c '/tests/test.sh; cat /logs/verifier/reward.txt'
+```
+
+Both controls matter. A grader that cannot be satisfied makes every score
+meaningless; a grader that never fails is worthless.
+
+### Gated — needs internal MSBench access
+
+```bash
+pip install keyring artifacts-keyring
+pip install msbench-cli --index-url=https://pkgs.dev.azure.com/devdiv/_packaging/MicrosoftSweBench/pypi/simple/
+az login
+
+# BOTH arms — a treatment score without its control is not a result
+msbench-cli run --benchmark documentdb-sdk-skills          --pass_at_k 5 ...
+msbench-cli run --benchmark documentdb-sdk-skills-noskills --pass_at_k 5 ...
+
+msbench-cli report --run_id <id> --output report.json   # includes token cost
+```
+
+> `pip install msbench` installs an **unrelated** package. The real tool is
+> `msbench-cli` from the private feed.
+
+### Cost per task
+
+The verifier writes MSBench `custom_metrics.json` with per-task token usage, so
+runs can be compared across tasks:
+
+| Metric | Why |
+|---|---|
+| `tokens_fresh_input` | input billed at the uncached rate — the honest cost |
+| `cache_read_share_pct` | how much the skill payload was amortised |
+| `ai_credits` | the money number |
+| `credits_to_green` | cost of a **passing** run only |
+| `checks_<category>_passed/_total` | which rung an expensive run was failing |
+| `tokens_available` | `0` when harvesting failed, so a gap is never read as free |
+
+---
+
 ## The grading ladder
 
 Pick the **strongest** criterion the scenario allows. An LLM judge is the last
@@ -235,6 +309,7 @@ everything" fails, and asserts the result set is unchanged.
 |---|---|---|
 | [`loop-a-tests.yml`](../.github/workflows/loop-a-tests.yml) | push, PR, dispatch | free |
 | [`loop-b-evals.yml`](../.github/workflows/loop-b-evals.yml) | dispatch, monthly | credits |
+| [`loop-c-benchmark.yml`](../.github/workflows/loop-c-benchmark.yml) | PR (validate only), dispatch | free / Docker / gated |
 
 Loop B's `validate` job (static guards + `vally lint` + matrix resolve) always
 runs and is free, so a broken skill path is caught **before** any credits are

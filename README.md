@@ -65,7 +65,9 @@ bash knowledge-base/kb-route.sh --db contoso "why are my aggregations slow even 
 Demo datasets are seeders under [`scenarios/`](scenarios/) (they plant the
 problems the tools find). The kit is guarded by **two test loops** — deterministic
 script tests in [`testing/`](testing/README.md) and cross-model skill evals in
-[`evals/`](evals/README.md) — described in [`docs/TESTING.md`](docs/TESTING.md).
+[`evals/`](evals/README.md), plus an MSBench benchmark in
+[`benchmarks/`](benchmarks/documentdb-sdk-skills/README.md) — all described in
+[`docs/TESTING.md`](docs/TESTING.md).
 
 - **Router:** [`knowledge-base/README.md`](knowledge-base/README.md) · **Demo datasets:** [`scenarios/`](scenarios/)
 - **Testing:** [`docs/TESTING.md`](docs/TESTING.md) · **Token study:** [`token-tests/RESULTS.md`](token-tests/RESULTS.md)
@@ -85,6 +87,7 @@ knowledge-base/          # NL → script router (kb.json + kb_route.py) + demo
 scenarios/contoso/       # ready-to-run TOAST demo dataset (+ optional scaling-benchmark/)
 testing/                 # Loop A — deterministic tests for the scripts (pytest)
 evals/                   # Loop B — cross-model skill evals (Vally) + cost accounting
+benchmarks/              # Loop C — MSBench skill-efficacy benchmark (publication layer)
 token-tests/             # measured token savings of scripts vs text-skill workflows
 docs/                    # SKILLS.md (catalog), DIAGNOSTICS.md (toolbox), TESTING.md
 ```
