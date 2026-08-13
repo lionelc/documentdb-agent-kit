@@ -33,6 +33,8 @@ SCRIPTS_DIR = REPO_DIR / "scripts"
 CONTAINER = os.environ.get("DOCDB_CONTAINER", "documentdb-local")
 PORT = os.environ.get("DOCDB_PORT", "10260")
 PG_PORT = os.environ.get("DOCDB_PG_PORT", "9712")
+PG_USER = os.environ.get("DOCDB_PG_USER", "documentdb")
+PG_DB = os.environ.get("DOCDB_PG_DB", "postgres")
 DB_USER = os.environ.get("DOCDB_USER", "docdbadmin")
 DB_PASSWORD = os.environ.get("DOCDB_PASSWORD") or os.environ.get("DB_PASSWORD") or ""
 
@@ -101,6 +103,32 @@ def can_authenticate(container=CONTAINER, timeout=60):
     return False, (out or "").strip()[:300]
 
 
+def analyze(container=CONTAINER, timeout=180):
+    """Refresh PostgreSQL planner statistics.
+
+    Called after seeding. Immediately after a bulk insert the planner is working
+    from stale (or absent) statistics, so its cost estimates — and therefore the
+    PLAN IT CHOOSES — can differ from the plan it will choose a moment later
+    once autovacuum has analysed the table.
+
+    That is a real source of test flakiness rather than a theoretical one: the
+    determinism suite failed roughly 2 runs in 7 because a probe on a
+    non-leading index column was planned as an index scan in one run and a
+    collection scan in another, purely because background ANALYZE landed
+    between them. Settling statistics up front removes the race, and it is what
+    any plan-sensitive measurement should do.
+
+    Best-effort: a failure here is not a test failure, only a missed
+    optimisation, so it is reported and swallowed.
+    """
+    p = docker_exec(
+        ["psql", "-h", "localhost", "-p", PG_PORT, "-U", PG_USER,
+         "-d", PG_DB, "-q", "-c", "ANALYZE"],
+        timeout=timeout, container=container,
+    )
+    return p.returncode == 0
+
+
 def seed(db, fixture_path, container=CONTAINER, timeout=300):
     """Copy a .js fixture into the container and execute it against `db`."""
     fixture_path = Path(fixture_path)
@@ -114,6 +142,8 @@ def seed(db, fixture_path, container=CONTAINER, timeout=300):
     out = (p.stdout or "") + (p.stderr or "")
     if p.returncode != 0:
         raise RuntimeError(f"fixture seed failed (rc={p.returncode}):\n{out}")
+    # Settle planner statistics before anything measures a query plan.
+    analyze(container=container)
     return out
 
 

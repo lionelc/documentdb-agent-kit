@@ -72,6 +72,29 @@ evidence that this suite does something.
 | 2 | `document-bloat-advisor.sh` | `$sample` for `dominant_fields` → sizes wobbled (`title:13B` vs `title:12B`) | deterministic sampler + tie-broken sort |
 | 3 | `perf-advisor.sh` | `slow_queries` membership decided by a wall-clock threshold → *which* queries qualified changed with cache warmth | split into `query_timings` (deterministic membership) + `slow_queries` (measurement) |
 | 4 | `perf-advisor.sh` | COLLSCAN audit built probe values from `findOne()`, i.e. an **arbitrary** document → a numeric probe of `val/2` scanned a different fraction each run, changing `docs_scanned` and sometimes the chosen plan | probe the first document by `_id` |
+| 5 | `perf-advisor.sh` | `index_health[].unused` reads `$indexStats` access counters — which the tool's **own probe queries mutate**, and which the engine updates **asynchronously** | treated as a measurement (allowlisted); `redundant` still asserted |
+
+| 6 | *the harness* | The planner chose **IXSCAN in one run and COLLSCAN in the next** for the same probe, because table statistics were still stale from the bulk seed and background `ANALYZE` landed mid-suite | `kit.seed()` now runs `ANALYZE` after seeding |
+
+Bugs 5 and 6 are the subtle ones: the suite passed in isolation and in most full
+runs, but failed about **2 runs in 7** under load. An intermittently-failing
+determinism test is worse than none — it trains people to re-run until green.
+
+Bug 6 is worth dwelling on because it was **not a bug in the scripts at all**.
+`perf-advisor` was behaving correctly and reporting exactly what the engine told
+it; the engine's answer legitimately changed as PostgreSQL's cost estimates
+improved. Immediately after a bulk insert the planner is working from stale
+statistics, so a probe on a non-leading index column was costed as an index scan
+in one run and a sequential scan in another.
+
+The fix belongs in the harness, not the tool: `kit.seed()` now issues `ANALYZE`
+so every scenario measures against settled statistics. Verified by running the
+full suite **6 consecutive times with no failures**, against 2 failures in 7
+before.
+
+The general lesson: when a determinism test flakes, the first question is
+whether the *tool* is unstable or whether the *environment it observes* is. Only
+the first is a bug to fix in the tool.
 
 Bug 4 is the interesting one: it was **invisible until bug 3 was fixed**. While
 the timing noise was being normalised away, it masked a genuine logic defect

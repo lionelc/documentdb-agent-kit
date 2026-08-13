@@ -55,6 +55,20 @@ volatile_fields:
   - duration_ms
   - elapsed_ms
   - ms
+  # `index_health[].unused` is derived from `$indexStats` accesses.ops — a LIVE
+  # counter — and perf-advisor's OWN probe queries touch the very indexes it is
+  # reporting on. Worse, the counter is updated ASYNCHRONOUSLY, so whether run N
+  # observes the effect of run N-1's probes is a race.
+  #
+  # Symptom that exposed it: the suite passed in isolation and in most full
+  # runs, but failed roughly 2 runs in 7 under load. A test that fails
+  # intermittently is worse than no test — it trains people to re-run until
+  # green — so the measurement is separated from the finding here.
+  #
+  # What is still asserted: which indexes EXIST and which are REDUNDANT
+  # (`index_health[].redundant`) — those are structural facts. Only "has this
+  # index been read recently", which is a live measurement, is dropped.
+  - unused
   # PostgreSQL live counters and ratios
   - seq_scan
   - idx_scan
