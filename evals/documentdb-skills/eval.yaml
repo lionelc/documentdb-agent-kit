@@ -9,12 +9,11 @@
 # in the MSBench benchmark (which grades rubric conformance with deterministic
 # checks), assesses the QUALITY of the advice.
 #
-# That is a real gap, not an oversight to be glossed: a skill could trigger
-# perfectly and give poor advice, and this eval would report a pass. Closing it
-# means adding a `panel` / prompt grader with a written rubric, blinded to the
-# arm and judged by a model not under test — see evals/README.md §Grading
-# policy. Until then, claims must be limited to routing and to best-practice
-# conformance, not to "better answers".
+# A skill can trigger perfectly and still give poor advice, and this eval would
+# report a pass. That question is answered by its sibling,
+# ../documentdb-quality/quality-eval.yaml, which scores the guidance itself with
+# a blinded cross-model judge panel. Claims sourced from THIS file must be
+# limited to routing behaviour.
 #
 # Why start here (see the grading ladder in the plan):
 #   * it is the cheapest useful signal (runs on the free `mock` executor),

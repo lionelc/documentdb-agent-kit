@@ -90,6 +90,43 @@ would have them — the prompt **never tells the agent to use them**. This measu
 the skill's **organic** effect rather than a hinted best case. (Protocol borrowed
 from the MSBench `cosmos-sdk-skills` runner.)
 
+## The two evals
+
+| Eval | Question | Grader | Reproducible? |
+|---|---|---|---|
+| [`documentdb-skills/eval.yaml`](documentdb-skills/eval.yaml) | does the **right skill fire**? | `skill-invocation` (binary) | yes |
+| [`documentdb-quality/quality-eval.yaml`](documentdb-quality/quality-eval.yaml) | is the **guidance any good**? | blinded cross-model `panel` | **no, by construction** |
+
+The first is cheap and exact but cannot tell good advice from bad — a skill can
+fire perfectly and still give poor guidance. The second closes that gap and is
+the one place in the kit where an LLM judge is the right instrument, because
+"was this explanation clear and correct" is genuinely a matter of degree.
+
+### How the judge is kept honest
+
+Five guards, each enforced by a test in
+`testing/scenarios/evals-config/` so they cannot quietly regress:
+
+| Guard | Why |
+|---|---|
+| **3 judges, 3 vendors** | models favour their own output; no model may be the sole judge of a run it could have produced |
+| **median, not mean** | one miscalibrated judge must not swing the verdict |
+| **blinded prompt** | a judge told which arm it is grading will find reasons to agree |
+| **anchored criteria + per-stimulus rubric** | "rate 1–5" is not a measurement; both runs must be scored against the same yardstick |
+| **correctness is a `required` gate** | a fluent, confident, WRONG answer must fail however well it reads |
+
+`technical_correctness` also carries more weight than any presentational
+criterion, so style can never outvote accuracy.
+
+> ⚠️ **The mock executor is close to useless for this eval.** It invokes no
+> skills *and* cannot call the judge models, so every stimulus scores 0 with
+> zero tokens. `npm run eval:quality:mock` validates that the config loads and
+> the stimuli execute — nothing about quality. Never quote a mock score.
+
+> ⚠️ **Always publish the quality score next to the objective ones.** It is not
+> reproducible run-to-run. If the judge and the objective measures disagree
+> systematically, trust the objective ones and fix the rubric.
+
 ## Grading policy — match the grader to the claim
 
 LLM-as-a-judge is a legitimate and widely used grader, and Loop B relies on one

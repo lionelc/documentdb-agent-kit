@@ -246,10 +246,22 @@ and the reward is binary, so a judge would fit badly. Qualitative assessment
 belongs in **Loop B**, which drives real models and has native support for
 `panel` / prompt graders.
 
-**Status: not yet configured.** `evals/documentdb-skills/eval.yaml` currently
-uses only `skill-invocation` graders — it verifies the right skill *fires*, not
-whether the guidance it produced was any good. Until that gap is closed, no
-number produced anywhere in this kit speaks to guidance quality.
+**Status: built** — [`evals/documentdb-quality/quality-eval.yaml`](../../../evals/documentdb-quality/quality-eval.yaml)
+scores guidance quality with a blinded three-vendor judge panel against an
+anchored rubric, treatment vs control, with correctness as a hard gate. Not yet
+executed against real models.
+
+So the division of labour across the kit is now:
+
+| Claim | Evidence | Where |
+|---|---|---|
+| "the scripts are reproducible" | byte-identical output | Loop A |
+| "the right skill fires" | `skill-invocation`, binary | Loop B, `eval.yaml` |
+| **"the guidance is better"** | **blinded judge panel** | **Loop B, `quality-eval.yaml`** |
+| "the produced code follows best practice" | 30 deterministic checks | Loop C, this benchmark |
+
+This benchmark still cannot speak to guidance quality — that is not its job, and
+the quality eval now covers it.
 
 ---
 

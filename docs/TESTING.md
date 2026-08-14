@@ -145,12 +145,18 @@ Runs on [Vally](https://microsoft.github.io/vally/). **Everything below the
 cd evals && npm ci
 ```
 
+Loop B has **two** evals: `documentdb-skills/eval.yaml` asks whether the right
+skill fires (binary, reproducible), and `documentdb-quality/quality-eval.yaml`
+asks whether the guidance is any good (blinded cross-model judge panel, not
+reproducible by construction).
+
 ### Free — always do these first
 
 ```bash
-npm run lint              # validate the eval spec
-npm run experiment:plan   # resolve the 3x2 matrix, print the plan, spend nothing
-npm run eval:mock         # execute against the mock executor
+npm run lint:all               # validate both eval specs
+npm run experiment:plan        # resolve the 3x2 triggering matrix
+npm run experiment:quality:plan # resolve the quality treatment-vs-control matrix
+npm run eval:mock              # triggering eval against the mock executor
 ```
 
 > ⚠️ **The mock executor invokes no skills** (`Skills used 0`). Positive-trigger
@@ -168,7 +174,13 @@ npx vally experiment run documentdb-skills.experiment.yaml \
 
 # The full matrix: 3 models x {kit, control} x 5 runs
 npm run experiment
+
+# Guidance QUALITY, treatment vs control, judged by a blinded 3-vendor panel
+npm run experiment:quality
 ```
+
+The quality experiment is 2 arms x 4 stimuli x 3 runs = 24 agent runs, each
+graded by 3 judges = 72 judge calls. Run a single cell first.
 
 The matrix is **3 models × 2 arms × 5 runs = 30 trials per stimulus**. Start
 with one cell.
