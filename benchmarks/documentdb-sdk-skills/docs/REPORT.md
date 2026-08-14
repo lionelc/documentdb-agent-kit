@@ -265,36 +265,201 @@ the quality eval now covers it.
 
 ---
 
-## 4. How to produce the real report
+## 4. Reproducing every number
+
+Each stage below is independent — you can stop after any of them. Stages 1–2
+need only Docker; stage 3 onward needs internal MSBench access.
+
+### Prerequisites
 
 ```bash
+# Docker, plus the MSBench CLI for stages 3+
 export PATH="$HOME/pgmongo/msbench-tools/venv/bin:$PATH"
-az login
-
-# 1. Run BOTH arms. A one-armed number is not publishable.
-msbench-cli run --benchmark documentdb-sdk-skills \
-  --dataset benchmarks/documentdb-sdk-skills/msbench-registration/documentdb-sdk-skills/dataset.jsonl \
-  --pass_at_k 5 --runner benchmarks/documentdb-sdk-skills/shared/ces/runner.sh
-
-msbench-cli run --benchmark documentdb-sdk-skills-noskills \
-  --dataset benchmarks/documentdb-sdk-skills/msbench-registration/documentdb-sdk-skills-noskills/dataset.jsonl \
-  --pass_at_k 5 --runner benchmarks/documentdb-sdk-skills/shared/ces/runner.sh
-
-# 2. Export per-instance data (this is what carries the token metrics)
-msbench-cli report --run_id <treatment-run-id> --output treatment.json
-msbench-cli report --run_id <control-run-id>   --output control.json
-
-# 3. Generate the report
-python3 benchmarks/documentdb-sdk-skills/report.py \
-  --treatment treatment.json --control control.json \
-  --out benchmarks/documentdb-sdk-skills/docs/REPORT.md
+msbench-cli version          # -> 0.3.51
+az login                     # runs submit under your entitlement
 ```
 
-`report.py --json` emits the same summary as machine-readable JSON.
+> `pip install msbench` fetches an **unrelated** public package. The real tool
+> is `msbench-cli` from the internal feed — see `msbench-tools/README.md`.
 
 ---
 
-## 5. Reading the numbers honestly
+### Stage 1 — Build the images (Docker only, ~10 min)
+
+```bash
+cd benchmarks/documentdb-sdk-skills
+bash build.sh
+```
+
+`build.sh` stages two things before `docker build`, both deliberately:
+
+- **`.skills/`** — the kit's skills, copied from the sibling `skills/` tree so
+  the build context stays narrow.
+- **`.wheels/`** — every Python dependency, resolved **on the host** and
+  installed with `--no-index`. The task promises the agent no internet during
+  grading, so the image must not need PyPI to build. (It also cannot: on this
+  network `files.pythonhosted.org` is unreachable from Docker's VM even though
+  the host can reach it.)
+
+---
+
+### Stage 2 — Reproduce the grader validation (Docker only, ~15 min)
+
+This regenerates every number in [§1](#1-what-has-been-measured):
+
+```bash
+bash verify-controls.sh
+```
+
+Expected output — and the script exits non-zero if any control deviates:
+
+```
+control: oracle   REWARD=1   CHECKS=31/31
+control: empty    REWARD=0
+control: naive    REWARD=0   CHECKS=20/30
+    api 6/6   behavior 6/6   documentdb 0/5
+    engine 2/4   source 1/4   skills 4/4
+```
+
+Run one at a time with `--only naive`. The naive control is the meaningful one;
+see [`controls/README.md`](../controls/README.md) for why.
+
+Each run seeds 20,000 filler documents, which is why it is not fast. That
+volume is required, not incidental: on a 4-row collection a sequential scan is
+genuinely cheaper and the engine checks would fail the oracle itself.
+
+---
+
+### Stage 3 — Run the benchmark locally through MSBench (no ACR push)
+
+The task is registered `task_style: harbor-native`, so `--backend local` runs
+the whole thing on your machine — no image push, no central-repo registration.
+**Do this before publishing anything.**
+
+```bash
+pip install "msbench-cli[harbor]"
+
+msbench-cli run \
+  --benchmark documentdb-sdk-skills \
+  --dataset msbench-registration/documentdb-sdk-skills/dataset.jsonl \
+  --backend local \
+  --runner shared/ces/runner.sh
+```
+
+The arm is selected by the runner's `SKILLS_ARM` variable (`kit` or `control`).
+It **fails loudly** if `SKILLS_ARM=kit` but the skills are absent — a treatment
+arm whose skills silently fail to load is just a second control arm, and would
+produce a confident, wrong "the kit makes no difference".
+
+---
+
+### Stage 4 — Publish the images and register (internal access)
+
+```bash
+# Build and push to the internal registry
+harbor-format-curation import orders.toml
+harbor-format-curation build --profile staging orders.toml
+harbor-format-curation update-database --profile staging orders.toml
+```
+
+Then PR both registration folders into the central benchmarks repo:
+
+```
+msbench-registration/documentdb-sdk-skills/            -> benchmarks/skillsbench/documentdb-sdk-skills/
+msbench-registration/documentdb-sdk-skills-noskills/   -> benchmarks/skillsbench/documentdb-sdk-skills-noskills/
+```
+
+Each folder carries `registry.json`, `benchmark_loaders.toml` and
+`dataset.jsonl`. **`registry.json` is required** by the live platform; the
+Cosmos benchmark's registration predates that requirement and would be rejected
+today.
+
+---
+
+### Stage 5 — Run both arms
+
+```bash
+for arm in documentdb-sdk-skills documentdb-sdk-skills-noskills; do
+  msbench-cli run \
+    --benchmark "$arm" \
+    --dataset "msbench-registration/$arm/dataset.jsonl" \
+    --pass_at_k 5 \
+    --runner shared/ces/runner.sh
+done
+```
+
+**Both arms, always.** A treatment score with no control is not a result — 80%
+resolved could mean an excellent kit or an easy task, and nothing in the number
+distinguishes them.
+
+`--pass_at_k 5` uses the unbiased estimator `1 − C(n−c,k)/C(n,k)`. Agent runs
+are non-deterministic; a single attempt is an anecdote.
+
+---
+
+### Stage 6 — Generate the effectiveness report
+
+```bash
+msbench-cli report --run_id <treatment-run-id> --output treatment.json
+msbench-cli report --run_id <control-run-id>   --output control.json
+
+python3 report.py --treatment treatment.json --control control.json \
+  --out docs/REPORT-<date>.md
+```
+
+`report.py` **refuses to run on a single arm**. Add `--json` for machine-readable
+output.
+
+The per-instance token metrics travel inside those exports: the verifier writes
+`$OUTPUT_DIR/custom_metrics.json` and MSBench surfaces it as
+`custom_metrics_values`.
+
+---
+
+### Stage 7 — Guidance quality (Loop B, not MSBench)
+
+MSBench grades produced code against a fixed rubric. It cannot say whether the
+*advice* was good — that lives in Loop B:
+
+```bash
+cd evals && npm ci
+npm run experiment:quality:plan   # free: resolve the matrix
+npm run experiment:quality        # blinded 3-vendor judge panel, treatment vs control
+```
+
+---
+
+### Continuous checks (no infrastructure, every PR)
+
+```bash
+cd testing && pytest scenarios/benchmark-config scenarios/benchmark-metrics
+```
+
+Validates the registration files, the Harbor layout, that `instruction.md`
+leaks no hints, that the verifier parses as Python 3.10 (the image's
+interpreter), and that the cost metrics agree with Loop B's — all with no
+Docker, credentials or network.
+
+---
+
+### What each stage proves
+
+| Stage | Needs | Establishes |
+|---|---|---|
+| 1–2 | Docker | the grader can pass, can fail, and **discriminates** |
+| 3 | Docker + `msbench-cli[harbor]` | the Harbor/MSBench wiring works |
+| 4–5 | internal access | a citable `pass@k` for both arms |
+| 6 | — | the effectiveness + cost report |
+| 7 | Copilot SDK auth | whether the *guidance* is better |
+| CI | nothing | the configuration has not rotted |
+
+Stages 1–2 are worth running on every meaningful change to the verifier. They
+are the only ones that answer "is this instrument still trustworthy", and they
+cost nothing but time.
+
+---
+
+## 5. Reading the numbers honestly## 5. Reading the numbers honestly
 
 Four traps, each guarded by a test in
 `testing/scenarios/benchmark-metrics/`:

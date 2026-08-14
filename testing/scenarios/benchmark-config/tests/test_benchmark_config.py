@@ -447,3 +447,48 @@ def get_client():
     return MongoClient("mongodb://host")
 '''
     assert not _client_offenders(tmp_path, cached)
+
+
+# ---------------------------------------------------------------------------
+# reproducibility of the published numbers
+# ---------------------------------------------------------------------------
+def test_control_submissions_are_committed():
+    """The report cites the naive control's score as evidence.
+
+    That fixture originally lived only in /tmp, which made the headline
+    discrimination result impossible for anyone else to reproduce. Evidence
+    that cannot be re-run is an assertion, not a measurement.
+    """
+    naive = BENCH / "controls" / "naive-python"
+    for rel in ("app.py", "build.sh", "run.sh", "requirements.txt"):
+        assert (naive / rel).is_file(), f"naive control is missing {rel}"
+
+
+def test_naive_control_is_functional_but_not_best_practice():
+    """The fixture only proves anything if it is genuinely a WORKING app that
+    merely ignores best practice. If someone 'fixes' it, it stops testing the
+    thing it exists to test."""
+    src = (BENCH / "controls" / "naive-python" / "app.py").read_text()
+    # functional: implements the full contract
+    for endpoint in ("/health", "/orders"):
+        assert endpoint in src, f"naive control no longer serves {endpoint}"
+    assert "insert_one" in src and "find_one" in src, (
+        "naive control must really persist to DocumentDB, or it stops being a "
+        "test of best practice and becomes a test of basic competence"
+    )
+    # but deliberately wrong in the ways the kit teaches
+    assert "create_index" not in src, (
+        "naive control now creates an index; it no longer demonstrates the gap"
+    )
+    assert "schemaVersion" not in src, "naive control now sets schemaVersion"
+
+
+def test_verify_controls_script_checks_both_directions():
+    """A grader that cannot fail is worthless; one that cannot pass is broken.
+    The reproduction script must assert both, plus the case in between."""
+    script = (BENCH / "verify-controls.sh").read_text()
+    for name, expected in (("oracle", "1"), ("empty", "0"), ("naive", "0")):
+        assert f"run_control {name} {expected}" in script, (
+            f"verify-controls.sh does not assert {name} -> reward {expected}"
+        )
+    assert "exit 1" in script, "the script must fail the build when a control deviates"

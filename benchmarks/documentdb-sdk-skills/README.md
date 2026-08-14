@@ -182,6 +182,16 @@ reward one flaky check corrupts the entire signal, so `[tasks.skip-verification]
 here is empty and a test enforces that: a check that cannot be made
 deterministic must be **removed**, not skipped.
 
+## Reproducing the results
+
+```bash
+bash build.sh              # build both images (offline, from vendored wheels)
+bash verify-controls.sh    # oracle=1, empty=0, naive=0 — asserts all three
+```
+
+Full stage-by-stage guide, from a Docker-only build through to a published
+`pass@k`, in [`docs/REPORT.md` §4](docs/REPORT.md).
+
 ## Building and running locally
 
 ```bash
