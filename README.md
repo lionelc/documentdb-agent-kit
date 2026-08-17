@@ -70,7 +70,7 @@ script tests in [`testing/`](testing/README.md) and cross-model skill evals in
 [`docs/TESTING.md`](docs/TESTING.md).
 
 - **Router:** [`knowledge-base/README.md`](knowledge-base/README.md) · **Demo datasets:** [`scenarios/`](scenarios/)
-- **Testing:** [`docs/TESTING.md`](docs/TESTING.md) · **Token study:** [`token-tests/RESULTS.md`](token-tests/RESULTS.md)
+- **Testing:** [`docs/TESTING.md`](docs/TESTING.md) · **Route cost study:** [`benchmarks/documentdb-route-efficiency/`](benchmarks/documentdb-route-efficiency/README.md)
 
 ## Repo Structure
 
@@ -87,8 +87,7 @@ knowledge-base/          # NL → script router (kb.json + kb_route.py) + demo
 scenarios/contoso/       # ready-to-run TOAST demo dataset (+ optional scaling-benchmark/)
 testing/                 # Loop A — deterministic tests for the scripts (pytest)
 evals/                   # Loop B — cross-model skill evals (Vally) + cost accounting
-benchmarks/              # Loop C — MSBench skill-efficacy benchmark (publication layer)
-token-tests/             # measured token savings of scripts vs text-skill workflows
+benchmarks/              # Loop C — MSBench skill-efficacy benchmark + route-cost study
 docs/                    # SKILLS.md (catalog), DIAGNOSTICS.md (toolbox), TESTING.md
 ```
 
