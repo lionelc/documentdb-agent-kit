@@ -23,8 +23,17 @@ import json
 import statistics
 from pathlib import Path
 
+import sys as _sys
+_sys.path.insert(0, str(Path(__file__).parent / "shared" / "verifier"))
+import pricing  # noqa: E402
+
 ARMS = ["route-text", "route-script"]
+
+# USD is the headline. One token of Gemini 3.1 Pro is not one token of GPT-5.6
+# Sol — output differs 2.5x and input 2.5x — so a cross-model table in raw
+# tokens ranks tokenisers and verbosity rather than cost.
 COST_KEYS = [
+    ("usd_total", "USD", "${:,.4f}"),
     ("tokens_fresh_input", "Fresh input tokens", "{:,.0f}"),
     ("tokens_output", "Output tokens", "{:,.0f}"),
     ("ai_credits", "AI credits", "{:,.2f}"),
@@ -49,7 +58,18 @@ def summarise(runs: list[dict]) -> dict:
         mine = [r for r in runs if r.get("arm") == arm]
         parity_ok = [r for r in mine if r.get("parity")]
         # Cost means come from parity-passing runs ONLY.
-        costed = [r for r in parity_ok if r.get("tokens_available")]
+        costed = [r for r in parity_ok if r.get("tokens_available")
+                  or r.get("input_tokens")]
+
+        # Price each run against its OWN model's published rates before
+        # averaging; averaging tokens across models and pricing afterwards
+        # would charge one model's rate for another's usage.
+        for r in costed:
+            if "usd_total" not in r and r.get("model"):
+                try:
+                    r["usd_total"] = pricing.cost_usd(r, r["model"])["usd_total"]
+                except pricing.UnknownModel:
+                    r["usd_total"] = None
 
         cost = {}
         for key, _, _ in COST_KEYS:

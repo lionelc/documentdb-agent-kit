@@ -197,3 +197,131 @@ def test_report_warns_when_the_cheaper_route_is_less_correct():
     ]
     out = m.render(m.summarise(runs), runs)
     assert "suspect" in out.lower()
+
+
+# ---------------------------------------------------------------------------
+# cross-model cost in USD
+#
+# One token of Gemini 3.1 Pro is not one token of GPT-5.6 Sol: output differs
+# 2.5x ($12 vs $30 / MTok) and input 2.5x ($2 vs $5). A cross-model table in raw
+# tokens would rank tokenisers and verbosity, not cost.
+# ---------------------------------------------------------------------------
+import pricing  # noqa: E402
+
+
+def test_every_matrix_model_has_published_pricing():
+    """An unpriced model must raise, not fall back to a default rate — a
+    guessed rate produces a plausible dollar figure nothing can identify as
+    invented."""
+    for model in ("claude-opus-5", "gpt-5.6-sol", "gemini-3.1-pro-preview"):
+        assert model in pricing.PRICING, f"no pricing for matrix model {model}"
+        assert pricing.PRICING[model]["source"].startswith("http")
+    with pytest.raises(pricing.UnknownModel):
+        pricing.cost_usd({"input_tokens": 1000, "output_tokens": 10}, "no-such-model")
+
+
+def test_cached_input_is_billed_at_the_discounted_rate():
+    """~90% discount on cache reads is why the fresh/cached split matters.
+
+    Billing all input at the full rate would overstate a skill payload's cost
+    by roughly 10x, since it is sent once and then read from cache.
+    """
+    for model in ("claude-opus-5", "gpt-5.6-sol", "gemini-3.1-pro-preview"):
+        p = pricing.PRICING[model]
+        assert p["cached_input"] < p["input"] / 2, (
+            f"{model}: cached input is not discounted"
+        )
+    all_fresh = pricing.cost_usd(
+        {"input_tokens": 1_000_000, "cache_read_tokens": 0, "output_tokens": 0},
+        "claude-opus-5")
+    all_cached = pricing.cost_usd(
+        {"input_tokens": 1_000_000, "cache_read_tokens": 1_000_000, "output_tokens": 0},
+        "claude-opus-5")
+    assert all_fresh["usd_total"] == pytest.approx(5.00)
+    assert all_cached["usd_total"] == pytest.approx(0.50)
+
+
+def test_models_are_not_interchangeable_on_cost():
+    """The reason this module exists: identical usage costs materially
+    different amounts, so tokens alone cannot rank models."""
+    usage = {"input_tokens": 100_000, "cache_read_tokens": 90_000,
+             "output_tokens": 5_000}
+    costs = {m: pricing.cost_usd(usage, m)["usd_total"]
+             for m in ("claude-opus-5", "gpt-5.6-sol", "gemini-3.1-pro-preview")}
+    assert costs["gemini-3.1-pro-preview"] < costs["claude-opus-5"]
+    assert costs["claude-opus-5"] < costs["gpt-5.6-sol"]
+    spread = max(costs.values()) / min(costs.values())
+    assert spread > 1.5, (
+        f"identical usage differs by only {spread:.2f}x across models; if that "
+        f"is really true the pricing table is probably stale ({costs})"
+    )
+
+
+def test_long_context_tier_is_applied():
+    """Both Sol and Gemini reprice the WHOLE request above a threshold, not
+    just the overflow. Missing this understates a long run's cost."""
+    below = pricing.cost_usd(
+        {"input_tokens": 100_000, "cache_read_tokens": 0, "output_tokens": 1000},
+        "gemini-3.1-pro-preview")
+    above = pricing.cost_usd(
+        {"input_tokens": 300_000, "cache_read_tokens": 0, "output_tokens": 1000},
+        "gemini-3.1-pro-preview")
+    assert below["long_context_tier"] is False
+    assert above["long_context_tier"] is True
+    assert above["rates_usd_per_mtok"]["input"] > below["rates_usd_per_mtok"]["input"]
+
+
+def test_pricing_table_records_when_it_was_retrieved():
+    """Rates change. A stale table produces wrong dollar figures with no other
+    symptom, so the retrieval date must travel with every priced result."""
+    assert pricing.PRICING_RETRIEVED
+    priced = pricing.cost_usd(
+        {"input_tokens": 1000, "output_tokens": 10}, "claude-opus-5")
+    assert priced["pricing_retrieved"] == pricing.PRICING_RETRIEVED
+    assert priced["pricing_source"].startswith("http")
+
+
+def test_published_rates_agree_with_copilot_credits():
+    """Cross-check against a second, independent cost source.
+
+    Copilot's `total_nano_aiu` is token-based per-model billing at
+    1 credit = $0.01. Pricing real usage with the published rates and dividing
+    by (credits x $0.01) gives ~1.0 for every model measured. A future
+    divergence means either the rate table has gone stale or Copilot changed
+    its billing — both worth catching.
+    """
+    import sqlite3
+    store = Path.home() / ".copilot" / "session-store.db"
+    if not store.is_file():
+        pytest.skip("no local session store to cross-check against")
+    conn = sqlite3.connect(f"file:{store}?mode=ro", uri=True)
+    checked = 0
+    try:
+        for model in ("claude-opus-5", "gpt-5.6-sol", "gemini-3.1-pro-preview"):
+            rows = list(conn.execute(
+                "SELECT input_tokens, cache_read_tokens, output_tokens, total_nano_aiu "
+                "FROM assistant_usage_events "
+                "WHERE model = ? AND total_nano_aiu > 0 LIMIT 100", (model,)))
+            if len(rows) < 5:
+                continue
+            ratios = []
+            for inp, cache, out, aiu in rows:
+                usd = pricing.cost_usd(
+                    {"input_tokens": inp, "cache_read_tokens": cache,
+                     "output_tokens": out}, model)["usd_total"]
+                credits_usd = (aiu / 1e9) * 0.01
+                if credits_usd > 0:
+                    ratios.append(usd / credits_usd)
+            if not ratios:
+                continue
+            checked += 1
+            median = sorted(ratios)[len(ratios) // 2]
+            assert 0.8 < median < 1.25, (
+                f"{model}: published rates and Copilot credits disagree by "
+                f"{median:.2f}x. Either PRICING is stale (retrieved "
+                f"{pricing.PRICING_RETRIEVED}) or billing changed."
+            )
+    finally:
+        conn.close()
+    if not checked:
+        pytest.skip("not enough local usage rows to cross-check")

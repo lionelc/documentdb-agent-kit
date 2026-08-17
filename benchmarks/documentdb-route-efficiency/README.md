@@ -117,8 +117,52 @@ If the measured saving is far below 77%, that supersedes the old figure.
 
 ---
 
+## Cross-model, and why cost is in USD
+
+**Tokens are not comparable across models.** Measured against published rates,
+output differs 2.5x between Gemini 3.1 Pro ($12/MTok) and GPT-5.6 Sol ($30/MTok),
+and input 2.5x ($2 vs $5). A cross-model table in raw tokens would rank
+tokenisers and verbosity, not cost. `shared/verifier/pricing.py` converts each
+run at its own model's published rate, itemising fresh input, cache reads
+(~90% cheaper) and output.
+
+Cross-checked against a second, independent source: Copilot's `total_nano_aiu`
+is token-based per-model billing at 1 credit = $0.01, and the two agree within
+~3% (gemini 1.000, opus-5 0.995, opus-4.8 0.985, sol 0.968). A test fails if
+they ever diverge, which would mean either the rate table has gone stale or
+billing changed.
+
+## Running it: subagents, no extra credential
+
+The cross-model matrix was thought to need `COPILOT_SDK_AUTH_TOKEN`. It does
+not. The Copilot CLI's own subagents supply the three properties this
+experiment needs:
+
+| Requirement | How a subagent satisfies it |
+|---|---|
+| clean context per run | each subagent has its own context window — structural, not cleanup |
+| model selection | pinned per subagent |
+| per-run attribution | usage lands in `assistant_usage_events` with a distinct non-null `agent_id`, exactly one model each |
+
+Verified with a probe pinned to `gemini-3.1-pro-preview`: one row,
+`agent_id=toolu_01MYbS4…`, 6,867 in / 3 out, $0.01377 — matching the 1.377
+credits Copilot recorded. The orchestrating parent's rows carry
+`agent_id=NULL` and are excluded.
+
+```bash
+python3 shared/verifier/attribute.py snapshot      # -> <id>
+#   ... launch subagents, one per (model, arm) ...
+python3 shared/verifier/attribute.py collect --since <id> --out results/raw/runs.json
+python3 shared/verifier/pricing.py results/raw/runs.json
+```
+
+**What this harness is not:** a subagent is not the MSBench or Vally executor —
+different scaffolding, system prompt and tool surface. Absolute numbers are not
+comparable to an MSBench run. They are comparable *within* this harness, which
+is all a cross-model or cross-arm comparison needs.
+
 ## Status
 
-⬜ **Not yet run.** Building an agent-driven run needs model credentials
-(`COPILOT_SDK_AUTH_TOKEN`); the harness, fixture, arms and parity grader are in
-place and validated with scripted stand-ins. See [`results/`](results/).
+⬜ **Not yet run end-to-end.** Attribution, pricing, arms, fixture and the
+parity grader are built and validated; the subagent path removes the credential
+blocker. See [`results/`](results/).
