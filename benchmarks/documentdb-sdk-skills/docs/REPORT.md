@@ -76,6 +76,10 @@ The benchmark's **grader** has been validated end-to-end on a local build. This
 proves the instrument works. It says nothing about whether the kit helps — no
 agent has attempted the task.
 
+Committed artifact:
+[`results/2026-08-17-controls-validation.json`](../results/2026-08-17-controls-validation.json)
+(readable: [`.md`](../results/2026-08-17-controls-validation.md)).
+
 | Submission | Reward | Checks |
 |---|---|---|
 | Oracle (reference implementation) | **1** | 31 / 31 |
@@ -367,6 +371,9 @@ This regenerates every number in [§1](#1-what-has-been-measured):
 
 ```bash
 bash verify-controls.sh
+
+# or record the outcome as a committed artifact
+bash verify-controls.sh --output results/$(date -u +%F)-controls-validation.json
 ```
 
 Expected output — and the script exits non-zero if any control deviates:
@@ -457,13 +464,29 @@ are non-deterministic; a single attempt is an anecdote.
 
 ### Stage 6 — Generate the effectiveness report
 
-```bash
-msbench-cli report --run_id <treatment-run-id> --output treatment.json
-msbench-cli report --run_id <control-run-id>   --output control.json
+Results are **committed**, so a number quoted later can be traced to the run
+that produced it. Write them into [`results/`](../results/):
 
-python3 report.py --treatment treatment.json --control control.json \
-  --out docs/REPORT-<date>.md
+```bash
+DATE=$(date -u +%F)
+
+msbench-cli report --run_id <treatment-run-id> \
+  --output "results/$DATE-effectiveness-treatment.json"
+msbench-cli report --run_id <control-run-id> \
+  --output "results/$DATE-effectiveness-control.json"
+
+python3 report.py \
+  --treatment "results/$DATE-effectiveness-treatment.json" \
+  --control   "results/$DATE-effectiveness-control.json" \
+  --out       "results/$DATE-effectiveness.md"
 ```
+
+Two rules, both enforced by tests in `testing/scenarios/benchmark-config/`:
+**arms must be committed in pairs** (a treatment score with no control is not a
+result), and **every result carries provenance** — `run_id`, `image_tag`,
+`dataset_version`, `kit_commit`, `model`, `pass_at_k`. Raw MSBench dumps stay
+gitignored; only the curated artifact is checked in. See
+[`results/README.md`](../results/README.md).
 
 `report.py` **refuses to run on a single arm**. Add `--json` for machine-readable
 output.

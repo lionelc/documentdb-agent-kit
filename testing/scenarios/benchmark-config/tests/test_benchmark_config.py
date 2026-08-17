@@ -492,3 +492,126 @@ def test_verify_controls_script_checks_both_directions():
             f"verify-controls.sh does not assert {name} -> reward {expected}"
         )
     assert "exit 1" in script, "the script must fail the build when a control deviates"
+
+
+# ---------------------------------------------------------------------------
+# committed results
+#
+# Results are checked in so a number in a deck can be traced to the run that
+# produced it. These enforce the two properties that make a committed result
+# worth anything: it is interpretable later, and it is not one-armed.
+# ---------------------------------------------------------------------------
+RESULTS = BENCH / "results"
+
+REQUIRED_PROVENANCE = {"date", "kit_commit"}
+# Effectiveness results additionally need enough to re-run and to compare
+# like-for-like.
+REQUIRED_EFFECTIVENESS_PROVENANCE = REQUIRED_PROVENANCE | {
+    "run_id", "benchmark", "image_tag", "dataset_version", "model", "pass_at_k",
+}
+
+
+def _result_files():
+    return sorted(RESULTS.glob("*.json")) if RESULTS.is_dir() else []
+
+
+def test_results_directory_documents_its_contract():
+    assert (RESULTS / "README.md").is_file(), (
+        "results/ must carry a README defining the naming and provenance "
+        "contract, or committed numbers become uninterpretable folklore"
+    )
+
+
+def test_every_committed_result_has_provenance():
+    """A number without provenance cannot be interpreted a year later.
+
+    Which skills did the agent have? Which task image? Which model? Without
+    those, the result is a rumour with a decimal point.
+    """
+    for path in _result_files():
+        data = json.loads(path.read_text())
+        prov = data.get("provenance")
+        assert prov, f"{path.name} has no provenance block"
+        missing = REQUIRED_PROVENANCE - set(prov)
+        assert not missing, f"{path.name} provenance missing {sorted(missing)}"
+
+
+def test_effectiveness_results_are_committed_in_arm_pairs():
+    """The important one.
+
+    A treatment score with no control is not a result: 80% resolved could mean
+    an excellent kit or an easy task, and the number cannot distinguish them.
+    Committing one arm alone would let exactly that get quoted.
+
+    (cosmosdb-agent-kit's committed batch results are all `*-skills.*` with no
+    control counterpart, so a delta cannot be computed from that repo. This
+    test is a deliberate divergence.)
+    """
+    treatments = {p.name.replace("-treatment.json", "")
+                  for p in _result_files() if p.name.endswith("-treatment.json")}
+    controls = {p.name.replace("-control.json", "")
+                for p in _result_files() if p.name.endswith("-control.json")}
+
+    orphan_treatments = sorted(treatments - controls)
+    orphan_controls = sorted(controls - treatments)
+    assert not orphan_treatments, (
+        f"treatment results committed with no matching control: "
+        f"{orphan_treatments}. Publish both arms or neither."
+    )
+    assert not orphan_controls, (
+        f"control results committed with no matching treatment: {orphan_controls}"
+    )
+
+
+def test_effectiveness_results_carry_full_provenance():
+    """Effectiveness results need more than date+commit: without run_id,
+    image_tag, dataset_version, model and pass_at_k they cannot be re-run or
+    compared like-for-like."""
+    for path in _result_files():
+        data = json.loads(path.read_text())
+        if data.get("kind") != "effectiveness":
+            continue
+        missing = REQUIRED_EFFECTIVENESS_PROVENANCE - set(data.get("provenance", {}))
+        assert not missing, (
+            f"{path.name} is an effectiveness result but its provenance is "
+            f"missing {sorted(missing)}"
+        )
+
+
+def test_committed_results_have_a_readable_companion():
+    """Every machine-readable result needs a human-readable one beside it, or
+    it will only ever be read by a script."""
+    for path in _result_files():
+        if path.name == "README.md":
+            continue
+        companion = path.with_suffix(".md")
+        assert companion.is_file(), (
+            f"{path.name} has no {companion.name}; commit the rendered report "
+            f"alongside the raw data"
+        )
+
+
+def test_controls_validation_result_matches_the_report():
+    """The committed artifact and the prose in REPORT.md must not drift.
+
+    If someone updates one and forgets the other, the document stops describing
+    the evidence it cites.
+    """
+    path = RESULTS / "2026-08-17-controls-validation.json"
+    if not path.is_file():
+        pytest.skip("no controls-validation artifact committed")
+    data = json.loads(path.read_text())
+    controls = data["controls"]
+    assert controls["oracle"]["actual_reward"] == 1
+    assert controls["empty"]["actual_reward"] == 0
+    assert controls["naive"]["actual_reward"] == 0
+    assert data["all_as_expected"] is True
+
+    report = (BENCH / "docs" / "REPORT.md").read_text()
+    naive = controls["naive"]
+    assert f"{naive['checks_passed']} / {naive['checks_total']}" in report or \
+           f"{naive['checks_passed']}/{naive['checks_total']}" in report, (
+        f"REPORT.md does not mention the naive control's committed score "
+        f"({naive['checks_passed']}/{naive['checks_total']}) — the document and "
+        f"the artifact have drifted apart"
+    )

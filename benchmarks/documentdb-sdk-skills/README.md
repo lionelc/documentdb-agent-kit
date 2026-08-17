@@ -222,6 +222,10 @@ msbench-cli run --benchmark documentdb-sdk-skills \
 
 ## Results
 
+Committed under [`results/`](results/) with provenance, so any number can be
+traced to its run. Effectiveness results must be committed **in arm pairs** —
+a treatment score with no control is not a result.
+
 **No MSBench run has been executed yet**, so there is no effectiveness data.
 [`docs/REPORT.md`](docs/REPORT.md) records what has been measured (grader
 validation), what has not, and how to generate the real report with

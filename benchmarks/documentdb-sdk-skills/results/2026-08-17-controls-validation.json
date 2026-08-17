@@ -1,0 +1,34 @@
+{
+  "all_as_expected": true,
+  "controls": {
+    "empty": {
+      "actual_reward": 0,
+      "as_expected": true,
+      "checks_passed": null,
+      "checks_total": null,
+      "expected_reward": 0
+    },
+    "naive": {
+      "actual_reward": 0,
+      "as_expected": true,
+      "checks_passed": 20,
+      "checks_total": 30,
+      "expected_reward": 0
+    },
+    "oracle": {
+      "actual_reward": 1,
+      "as_expected": true,
+      "checks_passed": 31,
+      "checks_total": 31,
+      "expected_reward": 1
+    }
+  },
+  "kind": "controls-validation",
+  "provenance": {
+    "command": "bash verify-controls.sh",
+    "date": "2026-08-17",
+    "host": "local docker",
+    "image_tag": "documentdb-orders-api-python:latest",
+    "kit_commit": "3707cb1"
+  }
+}

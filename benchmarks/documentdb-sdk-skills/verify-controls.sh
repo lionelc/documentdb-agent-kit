@@ -25,7 +25,14 @@ HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 TASK_DIR="$HERE/tasks/orders-api-python"
 IMAGE="${TASK_TAG:-documentdb-orders-api-python:latest}"
 ONLY=""
-[ "${1:-}" = "--only" ] && ONLY="${2:-}"
+RESULT_JSON=""
+while [ $# -gt 0 ]; do
+    case "$1" in
+        --only)   ONLY="${2:-}"; shift 2;;
+        --output) RESULT_JSON="${2:-}"; shift 2;;
+        *) echo "unknown option: $1" >&2; exit 2;;
+    esac
+done
 
 if ! docker image inspect "$IMAGE" >/dev/null 2>&1; then
     echo "Image $IMAGE not found. Run:  bash build.sh" >&2
@@ -33,6 +40,8 @@ if ! docker image inspect "$IMAGE" >/dev/null 2>&1; then
 fi
 
 FAILURES=0
+RESULTS_TMP="$(mktemp)"
+trap 'rm -f "$RESULTS_TMP"' EXIT
 
 # run_control <name> <expected-reward> <setup-command>
 run_control() {
@@ -66,8 +75,13 @@ for c in ['api','behavior','documentdb','engine','source','skills']:
 
     echo "$out"
 
-    local actual
+    local actual checks
     actual=$(echo "$out" | sed -n 's/^REWARD=//p' | tail -1)
+    checks=$(echo "$out" | sed -n 's/^CHECKS=//p' | tail -1)
+    # Record for the machine-readable artifact. Categories are captured from the
+    # container's own custom_metrics.json, not re-derived here, so the committed
+    # result cannot drift from what the verifier actually reported.
+    printf '%s\t%s\t%s\t%s\n' "$name" "$expected" "$actual" "${checks:-}" >> "$RESULTS_TMP"
     if [ "$actual" = "$expected" ]; then
         echo "  ✅ $name: reward=$actual as expected"
     else
@@ -84,6 +98,44 @@ run_control empty 0 'true &&'
 
 # Naive: functional, but follows no DocumentDB best practice.
 run_control naive 0 'mkdir -p /app && cp -r /controls/naive-python/. /app/ && chmod +x /app/*.sh &&'
+
+if [ -n "$RESULT_JSON" ]; then
+    mkdir -p "$(dirname "$RESULT_JSON")"
+    KIT_COMMIT="$(git -C "$HERE" rev-parse --short HEAD 2>/dev/null || echo unknown)"
+    python3 - "$RESULTS_TMP" "$RESULT_JSON" "$KIT_COMMIT" "$IMAGE" <<'PYEOF'
+import json, subprocess, sys, datetime
+rows_path, out_path, commit, image = sys.argv[1:5]
+controls = {}
+for line in open(rows_path):
+    name, expected, actual, checks = (line.rstrip("\n").split("\t") + ["", "", "", ""])[:4]
+    passed = total = None
+    if checks and "/" in checks:
+        p, t = checks.split("/", 1)
+        passed, total = int(p), int(t)
+    controls[name] = {
+        "expected_reward": int(expected),
+        "actual_reward": int(actual) if actual.isdigit() else None,
+        "checks_passed": passed,
+        "checks_total": total,
+        "as_expected": actual == expected,
+    }
+artifact = {
+    "kind": "controls-validation",
+    "provenance": {
+        "date": datetime.date.today().isoformat(),
+        "kit_commit": commit,
+        "image_tag": image,
+        "host": "local docker",
+        "command": "bash verify-controls.sh",
+    },
+    "controls": controls,
+    "all_as_expected": all(c["as_expected"] for c in controls.values()),
+}
+json.dump(artifact, open(out_path, "w"), indent=2, sort_keys=True)
+open(out_path, "a").write("\n")
+print(f"  wrote {out_path}")
+PYEOF
+fi
 
 echo
 echo "══════════════════════════════════════════════════════════════"
