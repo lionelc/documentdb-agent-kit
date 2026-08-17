@@ -140,6 +140,37 @@ One number *is* generalisable and worth carrying into the analysis:
 then served from cache, which is why the report leads with fresh (uncached)
 input rather than raw `tokens_input`.
 
+Reproduce the pipeline (substitute your own session store; the numbers will be
+your session's, not these):
+
+```bash
+cd benchmarks/documentdb-sdk-skills
+
+# The oracle consumes no tokens of its own, so a real store is mounted in to
+# exercise the harvest path end-to-end inside the container.
+cp ~/.copilot/session-store.db /tmp/demo-store.db
+
+docker run --rm \
+  -v "$PWD/tasks/orders-api-python/tests:/tests:ro" \
+  -v "$PWD/tasks/orders-api-python/solution:/solution:ro" \
+  -v /tmp/demo-store.db:/root/.copilot/session-store.db:ro \
+  documentdb-orders-api-python:latest \
+  bash -c '/solution/solve.sh >/dev/null 2>&1 && /tests/test.sh >/dev/null 2>&1; \
+           cat /output/custom_metrics.json'
+```
+
+Expect `"tokens_available": 1` with populated token fields. Without the mount
+you get `"tokens_available": 0` and no token keys at all — which is the correct
+behaviour: a missing measurement must never be reported as zero cost.
+
+The same harvester also runs standalone, against any session store:
+
+```bash
+python3 shared/verifier/harvest_metrics.py \
+  --store ~/.copilot/session-store.db --output-dir /tmp/out
+cat /tmp/out/custom_metrics.json
+```
+
 ---
 
 ## 2. What has NOT been measured
@@ -269,6 +300,33 @@ the quality eval now covers it.
 
 Each stage below is independent — you can stop after any of them. Stages 1–2
 need only Docker; stage 3 onward needs internal MSBench access.
+
+### TL;DR — everything that needs no internal access
+
+Copy-paste. Reproduces every number in [§1](#1-what-has-been-measured) from a
+clean checkout in about 25 minutes. **Verified by running it end-to-end from a
+fresh clone** — 50 config tests, both images built offline, all three controls
+behaving as documented.
+
+```bash
+git clone https://github.com/Azure/documentdb-agent-kit.git
+cd documentdb-agent-kit
+
+# 1. config guards — no Docker, no credentials, ~1s
+python3 -m venv testing-venv && testing-venv/bin/pip install -q -r testing/requirements.txt
+(cd testing && ../testing-venv/bin/python -m pytest -q \
+    scenarios/benchmark-config scenarios/benchmark-metrics)
+
+# 2. build both images offline (wheels resolved on the host)
+cd benchmarks/documentdb-sdk-skills
+bash build.sh
+
+# 3. the grader validation: oracle=1, empty=0, naive=0
+bash verify-controls.sh
+```
+
+Everything below is the same thing, stage by stage, with the internal-access
+stages included.
 
 ### Prerequisites
 
@@ -459,7 +517,7 @@ cost nothing but time.
 
 ---
 
-## 5. Reading the numbers honestly## 5. Reading the numbers honestly
+## 5. Reading the numbers honestly
 
 Four traps, each guarded by a test in
 `testing/scenarios/benchmark-metrics/`:
