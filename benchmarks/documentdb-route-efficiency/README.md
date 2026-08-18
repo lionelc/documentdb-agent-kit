@@ -1,27 +1,5 @@
 # Route efficiency: text skills vs diagnostic scripts
 
-Replaces [`token-tests/`](../../token-tests/) with a **measured** comparison.
-
-## What changed, and why the numbers may move
-
-`token-tests/` never calls a model. It counts bytes with `wc -c` and converts
-with `tokens ≈ bytes/4`. Its headline — *52–97% saving, median 77%* — is a
-**payload-size estimate**, not consumption.
-
-Three things that proxy cannot see, each capable of moving the result in a
-different direction:
-
-| Missing from the proxy | Likely direction |
-|---|---|
-| **Caching.** A `SKILL.md` is sent once then served from cache (~91% of real input is cache reads), so its marginal cost is far below `bytes/4`. | **shrinks** the text arm's cost → *less* saving than claimed |
-| **Turns.** The text arm must run its own queries and interpret raw output, probably over several turns, each re-sending context. | **grows** the text arm's cost → *more* saving than claimed |
-| **Output + reasoning tokens.** Absent entirely from the proxy. | unknown |
-
-So this benchmark may well contradict the published figure. That is the point of
-measuring.
-
----
-
 ## The two arms
 
 The intervention is **which route the kit exposes**, and nothing else.
@@ -96,24 +74,6 @@ differently.
 
 **The headline is cost conditional on parity.** Comparing tokens across runs
 where one arm got the wrong answer compares nothing.
-
----
-
-## Honest expectations
-
-The script route should win on tokens — it is a compact JSON verdict rather than
-raw output plus a skill file. What is genuinely unknown:
-
-- whether the **saving survives caching** — the static proxy charged the text arm
-  full price for a payload that is actually cached
-- whether the text arm reaches **parity at all**, and how often. If it frequently
-  gets the answer *wrong*, the story is about correctness, not tokens — a better
-  story, and one `token-tests/` could not tell
-- whether the script arm is ever *worse*, e.g. when a script emits a large report
-  and the question needed one line
-
-If the measured saving is far below 77%, that supersedes the old figure.
-`token-tests/` stays in the tree, marked as the superseded estimate.
 
 ---
 

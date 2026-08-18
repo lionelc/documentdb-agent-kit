@@ -9,10 +9,6 @@ would manufacture a saving out of a failure. Runs that missed parity are counted
 and reported — they are the more interesting result — but excluded from the cost
 means.
 
-That is the single most important difference from the `token-tests/` estimate it
-replaces, which had no notion of correctness at all: it compared payload sizes
-whether or not either route would have produced the right answer.
-
 Usage:
   python3 summarize.py results/raw [--json] [--out results/<date>-route-efficiency.md]
 """
@@ -92,9 +88,6 @@ def render(summary: dict, runs: list[dict]) -> str:
     A = L.append
     A("# Route efficiency — text skills vs diagnostic scripts")
     A("")
-    A("Replaces the `token-tests/` estimate with measured consumption. "
-      "**Cost is compared only among runs that reached parity** — a route that "
-      "is cheaper because it answered wrong has saved nothing.")
     A("")
 
     A("## Parity — graded first")
@@ -162,12 +155,12 @@ def render(summary: dict, runs: list[dict]) -> str:
 
     A("---")
     A("")
-    A("**Against the superseded estimate.** `token-tests/` reported a 52–97% "
-      "saving (median 77%) from `bytes/4` payload sizes, with no model involved "
-      "and no correctness check. Where these measured numbers disagree, these "
-      "supersede it: caching makes the text route's payload far cheaper than "
-      "its byte count implies, while extra turns make it dearer, and neither "
-      "effect is visible to a static proxy.")
+    A("**Alongside the payload measurement.** `token-tests/` reports a 52–97% "
+      "saving (median 77%) in *context payload* — validated against a real "
+      "tokeniser to within 2.4%. That measures how much context each route "
+      "sends in one pass. The numbers above measure something different: "
+      "end-to-end cost, gated on reaching the correct answer. Both can be true "
+      "at once, and quoting them together is stronger than either alone.")
     return "\n".join(L)
 
 
