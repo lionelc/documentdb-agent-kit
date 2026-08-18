@@ -15,7 +15,6 @@ and `python3` on the host — no MCP server, no cloud, no API keys.
 | Knowledge-base router | [`knowledge-base/`](../knowledge-base/README.md) | Deterministic NL question → exact script (no LLM at routing time). |
 | Demo datasets | [`scenarios/ecommerce/`](../scenarios/ecommerce/), [`scenarios/contoso/`](../scenarios/contoso/README.md) | Seeders that plant the problems the tools find. |
 | Regression tests | [`testing/`](../testing/README.md) | Fixture-first contracts that guard the scripts. |
-| Token study | [`token-tests/`](../token-tests/README.md) | Measured token savings of scripts vs text-skill workflows. |
 
 ---
 
@@ -29,11 +28,11 @@ password; the scripts read it from `DB_USER` (default `docdbadmin`) and
 docker run -dt --name documentdb-local \
   -p 10260:10260 \
   -e USERNAME=docdbadmin \
-  -e PASSWORD=Test1234 \
+  -e PASSWORD=[YOUR_PASSWORD] \
   ghcr.io/microsoft/documentdb/documentdb-local:latest
 
 # the scripts require a password — export it once (or pass --password each time)
-export DB_PASSWORD=Test1234
+export DB_PASSWORD=[YOUR_PASSWORD]
 
 # preflight: confirm the engine answers (should print "1")
 docker exec documentdb-local psql -h localhost -p 9712 -U documentdb -d postgres -tAc "SELECT 1"
@@ -107,15 +106,6 @@ bash scripts/document-bloat-advisor.sh --db contoso     # opportunities now clea
 ```bash
 bash testing/run.sh          # fixture-first contracts; auto-creates a venv
 ```
-
-## 6. Reproduce the token study (optional)
-
-```bash
-cd token-tests
-bash token-ab-measure.sh | python3 summarize.py     # see RESULTS.md for the table
-```
-
----
 
 ## Connection defaults
 

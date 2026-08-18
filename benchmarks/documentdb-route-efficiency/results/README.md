@@ -32,6 +32,3 @@ python3 ../summarize.py raw --json > "$(date -u +%F)-route-efficiency.json"
 harness, arms, fixture and parity grader are built and validated; see
 [`../README.md`](../README.md).
 
-Until a run exists, the kit's published token claim remains the **estimate** in
-[`../../../token-tests/RESULTS.md`](../../../token-tests/RESULTS.md), which is
-`bytes/4` payload arithmetic with no model and no correctness check.

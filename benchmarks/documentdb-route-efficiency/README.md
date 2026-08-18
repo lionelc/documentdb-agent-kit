@@ -33,7 +33,7 @@ reset. This is the part most easily got wrong.
 |---|---|---|
 | **Conversation history** | a second run could answer from the first run's reasoning | one fresh agent session per run; no multi-turn reuse across runs |
 | **Prompt cache** | a warm cache makes the same payload cost far less | arm order is **randomised per iteration**, so warmth cannot systematically favour one arm |
-| **Database state** | `$indexStats` / `idx_scan` counters accumulate; `index-redundancy-finder`'s *unused* findings depend on them, and the old `token-tests` README documents exactly this volatility (52% → 93% depending on warmth) | **a fresh database per run**, uniquely named, seeded from the same deterministic fixture |
+| **Database state** | `$indexStats` / `idx_scan` counters accumulate; `index-redundancy-finder`'s *unused* findings depend on them | **a fresh database per run**, uniquely named, seeded from the same deterministic fixture |
 | **Planner statistics** | stale stats flip query plans (this caused a real 2-in-7 flake in Loop A) | `ANALYZE` after every seed |
 | **Filesystem** | a leftover script or `SKILL.md` silently converts one arm into the other | the arm installer **deletes the other route** and asserts it is gone |
 | **Answer file** | a stale `/output/finding.json` would be graded as this run's answer | removed before each run |

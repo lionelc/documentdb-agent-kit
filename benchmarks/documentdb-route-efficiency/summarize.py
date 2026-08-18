@@ -155,12 +155,10 @@ def render(summary: dict, runs: list[dict]) -> str:
 
     A("---")
     A("")
-    A("**Alongside the payload measurement.** `token-tests/` reports a 52–97% "
-      "saving (median 77%) in *context payload* — validated against a real "
-      "tokeniser to within 2.4%. That measures how much context each route "
-      "sends in one pass. The numbers above measure something different: "
-      "end-to-end cost, gated on reaching the correct answer. Both can be true "
-      "at once, and quoting them together is stronger than either alone.")
+    A("**How to read the saving.** It is a comparison of end-to-end cost "
+      "between two routes that both reached the correct finding. It is not a "
+      "context-size ratio: caching, turn count, and output tokens all move it, "
+      "and none of them are visible in a payload measurement.")
     return "\n".join(L)
 
 
