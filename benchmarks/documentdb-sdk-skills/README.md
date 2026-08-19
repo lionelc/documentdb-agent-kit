@@ -222,9 +222,27 @@ msbench-cli run --benchmark documentdb-sdk-skills \
 
 ## Results
 
-Committed under [`results/`](results/) with provenance, so any number can be
-traced to its run. Effectiveness results must be committed **in arm pairs** —
-a treatment score with no control is not a result.
+`results/` is **generated output**, not source. It may be absent — a fresh
+clone has none, and pruning stale artifacts is housekeeping. The benchmark's
+configuration is valid either way; the tests only assert things about results
+that actually exist.
+
+When results *are* committed, two rules apply (enforced by
+`testing/scenarios/benchmark-config/`):
+
+| Rule | Why |
+|---|---|
+| **Arms come in pairs** — a `*-treatment.json` needs its `*-control.json` | a treatment score with no control is not a result: 80% resolved could mean an excellent kit or an easy task |
+| **Provenance is mandatory** — `run_id`, `date`, `benchmark`, `image_tag`, `dataset_version`, `kit_commit`, `model`, `pass_at_k` | without `kit_commit` you cannot say which skills the agent had; without `model` you cannot compare like-for-like |
+
+Naming: `<date>-<what>[-<arm>].{json,md}` — a `.json` for tooling, a `.md` for
+humans. Raw MSBench dumps stay gitignored; only curated artifacts are committed.
+
+Regenerate the grader-validation artifact any time:
+
+```bash
+bash verify-controls.sh --output "results/$(date -u +%F)-controls-validation.json"
+```
 
 **No MSBench run has been executed yet**, so there is no effectiveness data.
 [`docs/REPORT.md`](docs/REPORT.md) records what has been measured (grader

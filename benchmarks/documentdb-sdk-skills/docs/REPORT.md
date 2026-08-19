@@ -76,9 +76,12 @@ The benchmark's **grader** has been validated end-to-end on a local build. This
 proves the instrument works. It says nothing about whether the kit helps — no
 agent has attempted the task.
 
-Committed artifact:
-[`results/2026-08-17-controls-validation.json`](../results/2026-08-17-controls-validation.json)
-(readable: [`.md`](../results/2026-08-17-controls-validation.md)).
+Measured on 2026-08-17 at kit commit `3707cb1`. Regenerate at any time — the
+script asserts each expected reward and exits non-zero on a deviation:
+
+```bash
+bash verify-controls.sh --output "results/$(date -u +%F)-controls-validation.json"
+```
 
 | Submission | Reward | Checks |
 |---|---|---|
@@ -464,8 +467,9 @@ are non-deterministic; a single attempt is an anecdote.
 
 ### Stage 6 — Generate the effectiveness report
 
-Results are **committed**, so a number quoted later can be traced to the run
-that produced it. Write them into [`results/`](../results/):
+Committed results let a number quoted later be traced to the run that produced
+it. Write them into `results/` (generated output — the directory may not exist
+until you create it):
 
 ```bash
 DATE=$(date -u +%F)
@@ -485,8 +489,8 @@ Two rules, both enforced by tests in `testing/scenarios/benchmark-config/`:
 **arms must be committed in pairs** (a treatment score with no control is not a
 result), and **every result carries provenance** — `run_id`, `image_tag`,
 `dataset_version`, `kit_commit`, `model`, `pass_at_k`. Raw MSBench dumps stay
-gitignored; only the curated artifact is checked in. See
-[`results/README.md`](../results/README.md).
+gitignored; only the curated artifact is checked in. The full contract is in
+the [benchmark README](../README.md#results).
 
 `report.py` **refuses to run on a single arm**. Add `--json` for machine-readable
 output.

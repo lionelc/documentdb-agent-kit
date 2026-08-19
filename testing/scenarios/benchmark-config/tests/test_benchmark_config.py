@@ -516,9 +516,23 @@ def _result_files():
 
 
 def test_results_directory_documents_its_contract():
+    """The naming/provenance contract must be documented — but only once there
+    are results to interpret.
+
+    This originally hard-required results/README.md, which made a CONFIG
+    validation depend on DATA being present: deleting stale artifacts, or
+    cloning fresh, failed the suite. Results are generated output and are
+    legitimately prunable; the benchmark's configuration is valid either way.
+
+    The contract itself now lives in the benchmark README, so it survives
+    deletion of the data directory.
+    """
+    if not _result_files():
+        pytest.skip("no committed results yet; nothing to interpret")
     assert (RESULTS / "README.md").is_file(), (
-        "results/ must carry a README defining the naming and provenance "
-        "contract, or committed numbers become uninterpretable folklore"
+        "results/ contains artifacts but no README defining the naming and "
+        "provenance contract — committed numbers become uninterpretable "
+        "folklore without it"
     )
 
 
