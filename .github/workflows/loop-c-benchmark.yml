@@ -62,13 +62,16 @@ jobs:
       - name: Lint shell entrypoints
         run: |
           sudo apt-get update -qq && sudo apt-get install -y -qq shellcheck
-          # SC1091: sourced files live inside the image, not the repo.
-          shellcheck -e SC1091 \
-            benchmarks/documentdb-sdk-skills/shared/verifier/runner.sh \
-            benchmarks/documentdb-sdk-skills/shared/base/start-documentdb.sh \
-            benchmarks/documentdb-sdk-skills/shared/ces/runner.sh \
-            benchmarks/documentdb-sdk-skills/tasks/*/tests/test.sh \
-            benchmarks/documentdb-sdk-skills/tasks/*/solution/solve.sh
+          # Lint EVERY shell script under benchmarks/, not a hand-maintained
+          # list. An explicit list silently stops covering new scripts, which is
+          # how a real bug (an agent prompt that was never passed, SC2034) sat
+          # unlinted in the route-efficiency harness.
+          #
+          # SC1091: sourced files live inside the container image, not the repo.
+          mapfile -t scripts < <(find benchmarks -name '*.sh' -type f | sort)
+          printf 'linting %d script(s)\n' "${#scripts[@]}"
+          printf '  %s\n' "${scripts[@]}"
+          shellcheck -e SC1091 "${scripts[@]}"
 
   # -------------------------------------------------------------------------
   oracle:

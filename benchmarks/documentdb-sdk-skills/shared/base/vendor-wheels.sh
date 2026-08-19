@@ -24,7 +24,6 @@
 set -euo pipefail
 
 DEST="${1:-.wheels}"
-HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 # Pinned, and shared by the base image (verifier) and the task image
 # (reference app). One list keeps them from drifting apart.
@@ -51,7 +50,7 @@ mkdir -p "$DEST"
 
 # Already vendored? Skip the download — this script runs on every build.
 if [ -n "$(ls -A "$DEST" 2>/dev/null || true)" ] && [ -z "${VENDOR_FORCE:-}" ]; then
-    echo "    $DEST already populated ($(ls "$DEST" | wc -l) files); set VENDOR_FORCE=1 to refresh"
+    echo "    $DEST already populated ($(find "$DEST" -maxdepth 1 -type f | wc -l) files); set VENDOR_FORCE=1 to refresh"
     exit 0
 fi
 
@@ -79,4 +78,4 @@ if ! python3 -m pip download \
     exit 1
 fi
 
-echo "    vendored $(ls "$DEST" | wc -l) wheels"
+echo "    vendored $(find "$DEST" -maxdepth 1 -type f | wc -l) wheels"

@@ -30,14 +30,18 @@
 #
 # THE AGENT COMMAND
 # -----------------
-# Set AGENT_CMD to whatever drives your agent non-interactively. It receives the
-# prompt on stdin and must leave its answer at $OUTPUT_DIR/finding.json.
+# Set AGENT_CMD to whatever drives your agent non-interactively. The prompt is
+# supplied BOTH on stdin and in $PROMPT, so use whichever your agent expects;
+# the answer must land at $OUTPUT_DIR/finding.json.
+#
 # There is deliberately NO default: a silent fallback would emit plausible
 # numbers from no agent at all, which is the one outcome worse than no data.
 #
 # Usage:
 #   export DB_PASSWORD=...
-#   export AGENT_CMD='copilot --allow-all-tools -p'
+#   export AGENT_CMD='copilot --allow-all-tools -p "$PROMPT"'   # prompt as arg
+#   #   ... or, for an agent that reads stdin:
+#   export AGENT_CMD='my-agent --stdin'
 #   bash run-comparison.sh --iterations 5
 
 set -uo pipefail
@@ -66,10 +70,10 @@ This harness will not invent a fallback. Without a real agent it could only
 produce numbers that look like measurements and are not, which is worse than
 producing nothing.
 
-  export AGENT_CMD='copilot --allow-all-tools -p'
+  export AGENT_CMD='copilot --allow-all-tools -p "$PROMPT"'
 
-The command receives the prompt on stdin and must write its answer to
-$OUTPUT_DIR/finding.json.
+The prompt is supplied both on stdin and in $PROMPT; the answer must be
+written to $OUTPUT_DIR/finding.json.
 MSG
     exit 2
 fi
@@ -135,13 +139,27 @@ for i in $(seq 1 "$ITERATIONS"); do
             continue
         fi
 
-        # 3. fresh agent session, identical prompt
-        prompt="$(sed "s/__DATABASE__/$db/g" "$TASK/instruction.md")"
+        # 3. fresh agent session, identical prompt.
+        #
+        # The prompt is supplied BOTH on stdin and as $PROMPT, so AGENT_CMD can
+        # use whichever its agent expects.
+        #
+        # This previously assigned a lowercase `prompt` while the command
+        # referenced `$PROMPT`, which was never set — so every agent received an
+        # EMPTY task, and `|| true` swallowed it. Every run would have failed
+        # parity and the conclusion would have been "neither route works".
+        # Caught by static analysis (SC2034: `prompt` assigned but never used).
+        PROMPT="$(sed "s/__DATABASE__/$db/g" "$TASK/instruction.md")"
+        export PROMPT
+        if [ -z "$PROMPT" ]; then
+            echo "  FATAL: prompt is empty (missing $TASK/instruction.md?)" >&2
+            continue
+        fi
         OUTPUT_DIR="$run_out" \
         DOCUMENTDB_DATABASE="$db" \
             timeout "${AGENT_TIMEOUT:-900}" \
-            bash -c "printf '%s' \"\$PROMPT\" | $AGENT_CMD" \
-            > "$run_out/agent.log" 2>&1 <<<"" || true
+            bash -c "$AGENT_CMD" <<<"$PROMPT" \
+            > "$run_out/agent.log" 2>&1 || true
 
         # 4. parity FIRST — cost is meaningless without it
         python3 "$HERE/shared/verifier/check_parity.py" \

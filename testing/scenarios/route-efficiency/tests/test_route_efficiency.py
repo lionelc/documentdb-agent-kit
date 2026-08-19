@@ -320,3 +320,36 @@ def test_published_rates_agree_with_copilot_credits():
         conn.close()
     if not checked:
         pytest.skip("not enough local usage rows to cross-check")
+
+
+def test_prompt_is_actually_passed_to_the_agent():
+    """Regression: the harness once built the prompt into a lowercase variable
+    while the agent command referenced an uppercase one that was never set.
+
+    Every agent would have received an EMPTY task, `|| true` would have hidden
+    it, every run would have failed parity, and the conclusion would have been
+    "neither route can do this" — a confident, wholly wrong result from a
+    one-character-class typo. Static analysis caught it (SC2034).
+    """
+    src = (BENCH / "run-comparison.sh").read_text()
+    assert 'PROMPT="$(sed' in src, "the prompt must be assigned to PROMPT"
+    assert "export PROMPT" in src, "PROMPT must be exported for AGENT_CMD"
+    assert '<<<"$PROMPT"' in src, "the prompt must also reach the agent on stdin"
+    assert 'if [ -z "$PROMPT" ]' in src, (
+        "an empty prompt must abort the run rather than silently grading a "
+        "no-op as a failed answer"
+    )
+
+
+def test_no_shell_script_has_lint_findings():
+    """CI lints every script under benchmarks/. Keeping this here means a
+    finding shows up in the normal test run too, not only in CI."""
+    import shutil
+    import subprocess
+    if not shutil.which("shellcheck"):
+        pytest.skip("shellcheck not installed")
+    scripts = sorted(str(p) for p in (kit.REPO_DIR / "benchmarks").rglob("*.sh"))
+    assert scripts, "no shell scripts found under benchmarks/"
+    proc = subprocess.run(["shellcheck", "-e", "SC1091", *scripts],
+                          capture_output=True, text=True, timeout=180)
+    assert proc.returncode == 0, f"shellcheck findings:\n{proc.stdout[:2000]}"

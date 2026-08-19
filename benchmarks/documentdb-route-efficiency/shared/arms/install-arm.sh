@@ -54,7 +54,7 @@ route-script)
     mkdir -p "$TOOLS_DEST"
     cp -r "$KIT_SRC/scripts" "$KIT_SRC/knowledge-base" "$TOOLS_DEST"/
     chmod +x "$TOOLS_DEST"/scripts/*.sh "$TOOLS_DEST"/knowledge-base/*.sh 2>/dev/null || true
-    echo "[arm] installed $(ls "$TOOLS_DEST"/scripts/*.sh 2>/dev/null | wc -l) scripts + router"
+    echo "[arm] installed $(find "$TOOLS_DEST/scripts" -maxdepth 1 -name '*.sh' 2>/dev/null | wc -l) scripts + router"
     ;;
 esac
 

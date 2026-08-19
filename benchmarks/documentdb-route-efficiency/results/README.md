@@ -19,7 +19,7 @@ cannot produce a report from a single arm.
 
 ```bash
 export DB_PASSWORD='<your-password>'
-export AGENT_CMD='copilot --allow-all-tools -p'
+export AGENT_CMD='copilot --allow-all-tools -p "$PROMPT"'
 
 bash ../run-comparison.sh --iterations 5
 python3 ../summarize.py raw --out "$(date -u +%F)-route-efficiency.md"
