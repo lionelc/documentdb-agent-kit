@@ -77,7 +77,11 @@ An improvement metric alone is trivially gamed: index every field and everything
 looks fast. Three guards make that cost something:
 
 - **`index-redundancy-finder.sh` is run as a paired regression guard** — the
-  remediation may not introduce indexes the kit itself would flag.
+  remediation may not introduce structural redundancy (`EXACT_DUPLICATE`,
+  `PREFIX_REDUNDANT`, or `REVERSE_VARIANT`). Live-counter findings such as
+  `WRITE_TAX` are excluded: a brand-new index can briefly report zero reads
+  until asynchronous usage counters propagate, even when `explain()` already
+  shows `IXSCAN`.
 - **Result sets must be identical** — a faster query returning different rows is
   not a fix.
 - **The before-state must genuinely be slow** — otherwise every later assertion
