@@ -10,6 +10,7 @@ the diagnostic toolbox: `perf-advisor.sh`, `index-redundancy-finder.sh`, and
 | File | What it is |
 |------|-----------|
 | `seed.sh` | Self-contained seeder (embeds the data-generation script; ~50K orders, ~150K order_items). |
+| [`mongodb-documentdb-compat/`](mongodb-documentdb-compat/QUICKSTART.md) | Portable Node.js workload that runs unchanged against MongoDB 7 and DocumentDB, including three `$lookup` queries and byte-identical result verification. |
 
 ## Run
 
