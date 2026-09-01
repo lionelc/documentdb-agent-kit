@@ -71,7 +71,7 @@ script tests in [`testing/`](testing/README.md) and cross-model skill evals in
 
 - **Router:** [`knowledge-base/README.md`](knowledge-base/README.md) · **Demo datasets:** [`scenarios/`](scenarios/)
 - **Testing:** [`docs/TESTING.md`](docs/TESTING.md) · **Route cost study:** [`benchmarks/documentdb-route-efficiency/`](benchmarks/documentdb-route-efficiency/README.md)
-- **MongoDB compatibility quick-start:** [`compat/`](compat/QUICKSTART.md) — run the same e-commerce project against MongoDB and DocumentDB by changing only `MONGODB_URI`.
+- **DocumentDB compatibility quick-start:** [`compat/`](compat/QUICKSTART.md) — run a MongoDB-compatible Node.js e-commerce project end-to-end on DocumentDB.
 
 ## Repo Structure
 
@@ -86,7 +86,7 @@ skills/
 scripts/                 # diagnostic toolbox — read-only analyzers + seeders
 knowledge-base/          # NL → script router (kb.json + kb_route.py) + demo
 scenarios/contoso/       # ready-to-run TOAST demo dataset (+ optional scaling-benchmark/)
-compat/                  # MongoDB-to-DocumentDB ecommerce compatibility quick-start
+compat/                  # MongoDB-compatible ecommerce project on DocumentDB
 testing/                 # Loop A — deterministic tests for the scripts (pytest)
 evals/                   # Loop B — cross-model skill evals (Vally) + cost accounting
 benchmarks/              # Loop C — MSBench skill-efficacy benchmark + route-cost study

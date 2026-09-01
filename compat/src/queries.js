@@ -131,9 +131,9 @@ export async function runQueries(db) {
     ])
     .toArray();
 
-  // $lookup does not guarantee array ordering. Normalize client-side so the
-  // MongoDB and DocumentDB result files can be compared byte-for-byte without
-  // mistaking an allowed order difference for a compatibility problem.
+  // $lookup does not guarantee array ordering. Normalize client-side so exact
+  // result verification does not mistake an allowed order difference for a
+  // query failure.
   for (const order of orderDetails) {
     order.items.sort((left, right) =>
       left.product_id.localeCompare(right.product_id)

@@ -1,14 +1,15 @@
-# MongoDB to Azure DocumentDB: e-commerce compatibility quick-start
+# Azure DocumentDB e-commerce quick-start
 
-This project runs one unchanged Node.js workload against MongoDB 7 and Azure
-DocumentDB. The only application setting that changes is `MONGODB_URI`.
+This is a MongoDB-compatible Node.js project running **entirely on Azure
+DocumentDB**. It uses the official `mongodb` driver and standard query syntax;
+no MongoDB server is required.
 
-> Azure DocumentDB and this agent kit are in public preview. This walkthrough
-> is a local compatibility demonstration, not production deployment guidance.
+> Azure DocumentDB and this agent kit are in public preview. This is a local
+> compatibility demonstration, not production deployment guidance.
 
-The reusable project-generation prompt is in [`PROMPT.md`](PROMPT.md).
+The minimal project-generation prompt is in [`PROMPT.md`](PROMPT.md).
 
-## What the workload covers
+## What is tested
 
 The deterministic seed creates:
 
@@ -20,15 +21,15 @@ The deterministic seed creates:
 | `order_items` | 96 |
 | `inventory` | 32 |
 
-The four checks include one filtered `find()` and three relational-style
-aggregations:
+The four exact-result checks cover:
 
-1. Orders grouped by customer, then joined to `customers` with `$lookup`.
-2. One order joined to its customer and `order_items`.
-3. Products joined to `inventory`, with warehouse counts and total quantity.
+1. A filtered and sorted `find()`.
+2. Orders grouped by customer, then joined to `customers` with `$lookup`.
+3. One order joined to its customer and `order_items`.
+4. Products joined to `inventory`.
 
-The queries use portable MongoDB operators only: `$match`, `$group`, `$lookup`,
-`$unwind`, `$project`, `$sort`, `$limit`, `$size`, and `$sum`.
+The workload uses `$match`, `$group`, `$lookup`, `$unwind`, `$project`,
+`$sort`, `$limit`, `$size`, and `$sum`.
 
 ## 1. Install
 
@@ -37,48 +38,10 @@ cd compat
 npm ci
 ```
 
-The project uses one singleton `MongoClient`. Authentication and TLS stay in
-the URI, so there is no MongoDB-vs-DocumentDB branch in the source.
+The source creates one process-wide `MongoClient`. Authentication and TLS are
+configured entirely through `MONGODB_URI`.
 
-## 2. Run against MongoDB 7
-
-Start a clean MongoDB container:
-
-```bash
-docker rm -f mongodb-compat 2>/dev/null || true
-docker run -d --name mongodb-compat \
-  -p 127.0.0.1:27018:27017 \
-  mongo:7.0
-```
-
-Run the seed and exact-result verification:
-
-```bash
-export MONGODB_URI='mongodb://127.0.0.1:27018/?directConnection=true'
-npm test
-
-RESULT_FILE=results/mongodb.json npm run query >/dev/null
-sha256sum results/mongodb.json
-```
-
-### MongoDB result
-
-Measured on 2026-08-31:
-
-```text
-{"database":"ecommerce_compat","counts":{"customers":12,"products":16,"orders":48,"order_items":96,"inventory":32}}
-{"status":"PASS","checks":4,"query_shapes":{"find":1,"lookup_aggregations":3}}
-ELAPSED_SECONDS=0.85
-c6d56dddb823ada7db9d2b47fbba97adb890dbed7dee2bff0c2d0a75f1dbad30  results/mongodb.json
-```
-
-The elapsed time is one local functional run, excluding container startup. It
-is recorded for reproducibility, not as a performance comparison.
-
-## 3. Switch to Azure DocumentDB
-
-Start a fresh local DocumentDB container using the current documented command
-arguments:
+## 2. Start DocumentDB Local
 
 ```bash
 export DOCDB_PASSWORD='<choose-a-password>'
@@ -91,7 +54,13 @@ docker run -d --name documentdb-compat \
   --password "$DOCDB_PASSWORD"
 ```
 
-Wait for the gateway to start, then change only the endpoint:
+Wait for the gateway port:
+
+```bash
+until (echo >/dev/tcp/127.0.0.1/10261) 2>/dev/null; do sleep 1; done
+```
+
+## 3. Run the end-to-end workflow
 
 ```bash
 ENCODED_PASSWORD=$(node -p 'encodeURIComponent(process.argv[1])' "$DOCDB_PASSWORD")
@@ -103,55 +72,36 @@ RESULT_FILE=results/documentdb.json npm run query >/dev/null
 sha256sum results/documentdb.json
 ```
 
-No JavaScript, query, schema, seed, or index definition changes are required.
-The DocumentDB URI adds credentials and local self-signed-certificate options.
-For Azure-hosted DocumentDB, use the connection string supplied by Azure and
-do not enable `tlsAllowInvalidCertificates`.
+For Azure-hosted DocumentDB, replace `MONGODB_URI` with the Azure connection
+string and do not enable `tlsAllowInvalidCertificates`.
 
-### DocumentDB result
+## Result
 
 Measured on 2026-08-31:
 
 ```text
 {"database":"ecommerce_compat","counts":{"customers":12,"products":16,"orders":48,"order_items":96,"inventory":32}}
 {"status":"PASS","checks":4,"query_shapes":{"find":1,"lookup_aggregations":3}}
-ELAPSED_SECONDS=1.01
+ELAPSED_SECONDS=12.22
 c6d56dddb823ada7db9d2b47fbba97adb890dbed7dee2bff0c2d0a75f1dbad30  results/documentdb.json
 ```
 
-As above, the elapsed time is diagnostic only. This walkthrough demonstrates
-query and result compatibility; it is not a MongoDB-vs-DocumentDB benchmark.
+The elapsed time is one local functional run started as soon as the gateway
+port opened; it includes the remaining driver wait for full readiness. It is
+recorded for reproducibility, not as a performance benchmark.
 
-## 4. Prove result parity
+## What this demonstrates
 
-```bash
-cmp -s results/mongodb.json results/documentdb.json \
-  && echo 'MongoDB and DocumentDB results are byte-identical'
+| Surface | Result |
+|---|---|
+| Official Node.js `mongodb` driver | PASS |
+| Deterministic seed and index creation | PASS |
+| Filter + projection + sort | PASS |
+| `$group` + customer `$lookup` | PASS |
+| Order + customer + item `$lookup` | PASS |
+| Product + inventory `$lookup` | PASS |
+| Exact expected output | PASS |
 
-sha256sum results/mongodb.json results/documentdb.json
-```
-
-Expected:
-
-```text
-MongoDB and DocumentDB results are byte-identical
-c6d56dddb823ada7db9d2b47fbba97adb890dbed7dee2bff0c2d0a75f1dbad30  results/mongodb.json
-c6d56dddb823ada7db9d2b47fbba97adb890dbed7dee2bff0c2d0a75f1dbad30  results/documentdb.json
-```
-
-## Compatibility result
-
-| Surface | MongoDB 7 | DocumentDB | Source changes |
-|---|---|---|---:|
-| Deterministic seed and indexes | PASS | PASS | 0 |
-| Filter + projection + sort | PASS | PASS | 0 |
-| `$group` + customer `$lookup` | PASS | PASS | 0 |
-| Order + customer + item `$lookup` | PASS | PASS | 0 |
-| Product + inventory `$lookup` | PASS | PASS | 0 |
-| Exact output parity | SHA-256 `c6d56d…ad30` | SHA-256 `c6d56d…ad30` | 0 |
-
-The compatibility claim demonstrated here is deliberately narrow and
-reproducible: this e-commerce workload produced byte-identical results after an
-endpoint-only switch. It does not imply that every MongoDB feature is supported;
-test advanced operators against the
+This demonstrates the tested MongoDB-compatible surface only; it does not imply
+that every MongoDB feature is supported. Check advanced operators against the
 [DocumentDB compatibility documentation](https://learn.microsoft.com/azure/documentdb/compatibility).
