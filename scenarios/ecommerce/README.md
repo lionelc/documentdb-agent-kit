@@ -11,6 +11,7 @@ the diagnostic toolbox: `perf-advisor.sh`, `index-redundancy-finder.sh`, and
 |------|-----------|
 | `seed.sh` | Self-contained seeder (embeds the data-generation script; ~50K orders, ~150K order_items). |
 | [`../../compat/`](../../compat/QUICKSTART.md) | MongoDB-compatible Node.js workload running end-to-end on DocumentDB, including three `$lookup` queries and exact-result verification. |
+| [`../ecommerce-advanced/`](../ecommerce-advanced/README.md) | Deterministic committed data for transactions, change streams, and advanced aggregation compatibility tests. |
 
 ## Run
 
