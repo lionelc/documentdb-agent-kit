@@ -33,7 +33,7 @@ The queries use portable MongoDB operators only: `$match`, `$group`, `$lookup`,
 ## 1. Install
 
 ```bash
-cd scenarios/ecommerce/mongodb-documentdb-compat
+cd compat
 npm ci
 ```
 
