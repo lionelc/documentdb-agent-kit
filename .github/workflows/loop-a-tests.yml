@@ -43,7 +43,28 @@ jobs:
         working-directory: testing
         # These scenarios override the container fixture with a no-op, so they
         # run with no Docker, no credentials and no network.
-        run: python -m pytest -ra scenarios/token-accounting scenarios/evals-config
+        run: python -m pytest -ra scenarios/token-accounting scenarios/evals-config scenarios/portable-cli
+
+  windows:
+    name: Windows portable CLI contracts
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install test deps
+        run: pip install -r testing/requirements.txt
+
+      - name: Validate Python and PowerShell launchers
+        working-directory: testing
+        run: python -m pytest -ra scenarios/portable-cli
+
+      - name: Execute a PowerShell launcher
+        shell: pwsh
+        run: .\scripts\perf-advisor.ps1 --help
 
   # -------------------------------------------------------------------------
   # The full scenario suite against a live container.

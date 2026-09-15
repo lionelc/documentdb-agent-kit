@@ -32,6 +32,9 @@
 #   bash scripts/perf-advisor.sh --db myapp --all-dbs  # scan all databases
 set -uo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "$SCRIPT_DIR/diagnostic-runtime.sh"
+
 CONTAINER_NAME="${CONTAINER_NAME:-documentdb-local}"
 PORT="${PORT:-10260}"
 PG_PORT="${PG_PORT:-9712}"
@@ -76,25 +79,25 @@ done
 # ── Helper functions ──────────────────────────────────────────────────
 run_mongosh() {
     local target_db="${2:-$DB}"
-    docker exec -u documentdb "$CONTAINER_NAME" mongosh \
+    docdb_exec_as documentdb mongosh \
         "localhost:${PORT}/${target_db}" -u "$USER" -p "$PASSWORD" \
         --authenticationMechanism SCRAM-SHA-256 --tls --tlsAllowInvalidCertificates \
         --quiet --eval "$1" 2>/dev/null
 }
 
 run_psql() {
-    docker exec "$CONTAINER_NAME" psql -h localhost -p "$PG_PORT" -U "$PG_USER" -d "$PG_DB" \
+    docdb_exec_as "" psql -h localhost -p "$PG_PORT" -U "$PG_USER" -d "$PG_DB" \
         -t --no-align -c "$1" 2>/dev/null
 }
 
 run_psql_pretty() {
-    docker exec "$CONTAINER_NAME" psql -h localhost -p "$PG_PORT" -U "$PG_USER" -d "$PG_DB" \
+    docdb_exec_as "" psql -h localhost -p "$PG_PORT" -U "$PG_USER" -d "$PG_DB" \
         -c "$1" 2>/dev/null | grep -v "^SET$"
 }
 
 # psql that returns a single scalar/line with no formatting (for JSON assembly)
 run_psql_raw() {
-    docker exec "$CONTAINER_NAME" psql -h localhost -p "$PG_PORT" -U "$PG_USER" -d "$PG_DB" \
+    docdb_exec_as "" psql -h localhost -p "$PG_PORT" -U "$PG_USER" -d "$PG_DB" \
         -t -A -c "$1" 2>/dev/null
 }
 

@@ -77,13 +77,10 @@ string and do not enable `tlsAllowInvalidCertificates`.
 
 ## Result
 
-Measured on 2026-08-31:
-
 ```text
 {"database":"ecommerce_compat","counts":{"customers":12,"products":16,"orders":48,"order_items":96,"inventory":32}}
 {"status":"PASS","checks":4,"query_shapes":{"find":1,"lookup_aggregations":3}}
 ELAPSED_SECONDS=12.22
-c6d56dddb823ada7db9d2b47fbba97adb890dbed7dee2bff0c2d0a75f1dbad30  results/documentdb.json
 ```
 
 The elapsed time is one local functional run started as soon as the gateway

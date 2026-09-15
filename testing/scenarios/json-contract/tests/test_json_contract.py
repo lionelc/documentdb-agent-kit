@@ -62,6 +62,32 @@ def test_json_stdout_is_pure_json(json_outputs):
 
 
 @pytest.mark.jsoncontract
+@pytest.mark.parametrize("script", list(SHAPE))
+def test_bash_and_portable_entry_points_have_same_json_shape(
+    json_outputs, seeded_db, script
+):
+    portable = json_outputs[script]
+    bash = kit.run_script(
+        script,
+        "--db",
+        seeded_db,
+        "--json",
+        want_json=True,
+        portable=False,
+    )
+    assert bash.returncode == 0, (
+        f"{script} Bash entry point failed (rc={bash.returncode})\n"
+        f"{bash.stderr[:400]}"
+    )
+    assert bash.json is not None, (
+        f"{script} Bash entry point emitted invalid JSON:\n{bash.stdout[:400]}"
+    )
+    assert type(bash.json) is type(portable.json)
+    if isinstance(portable.json, dict):
+        assert set(bash.json) == set(portable.json)
+
+
+@pytest.mark.jsoncontract
 def test_perf_advisor_nested_shape(json_outputs):
     d = json_outputs["perf-advisor.sh"].json
     assert isinstance(d["mongo"], list) and d["mongo"], "perf: mongo[] is empty"

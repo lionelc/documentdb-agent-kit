@@ -11,8 +11,7 @@ The dataset is generated from source, validated without a database, and
 committed as JSONL so the exact same bytes can later be loaded into MongoDB and
 DocumentDB.
 
-> Azure DocumentDB and this agent kit are in public preview. These fixtures are
-> for compatibility testing, not production sample data.
+> These fixtures are for compatibility testing, not production sample data.
 
 ## Dataset
 

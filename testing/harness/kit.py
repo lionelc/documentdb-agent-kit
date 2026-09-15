@@ -18,6 +18,7 @@ from __future__ import annotations
 import json
 import os
 import subprocess
+import sys
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -152,17 +153,24 @@ def drop_db(db, container=CONTAINER):
 
 
 # --- Running agent-kit scripts --------------------------------------------
-def run_script(name, *args, want_json=False, timeout=300):
-    """Run scripts/<name> with args. If want_json, parse stdout as JSON.
+def run_script(name, *args, want_json=False, timeout=300, portable=True):
+    """Run a diagnostic with args. If want_json, parse stdout as JSON.
 
     Passes the harness connection config to the script via environment (the
     scripts read DB_PASSWORD / DB_USER / CONTAINER_NAME / PORT / PG_PORT), so no
-    credentials are baked into either the scripts or this harness.
+    credentials are baked into either the scripts or this harness. Prefer the
+    portable Python entry point so Linux CI exercises the same host-side code
+    used by Windows and PowerShell.
     """
     script = SCRIPTS_DIR / name
     if not script.exists():
         raise FileNotFoundError(f"script not found: {script}")
-    cmd = ["bash", str(script), *args]
+    portable_script = script.with_suffix(".py")
+    cmd = (
+        [sys.executable, str(portable_script), *args]
+        if portable and portable_script.exists()
+        else ["bash", str(script), *args]
+    )
     env = {
         **os.environ,
         "DB_PASSWORD": DB_PASSWORD,

@@ -22,6 +22,9 @@
 #           an agent/router can consume the verdict without the full human report.
 set -uo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "$SCRIPT_DIR/diagnostic-runtime.sh"
+
 CONTAINER_NAME="${CONTAINER_NAME:-documentdb-local}"
 PORT="${PORT:-10260}"
 USER="${DB_USER:-docdbadmin}"
@@ -56,7 +59,7 @@ done
 [[ -z "$PASSWORD" ]] && { echo "Error: no password. Set DB_PASSWORD or pass --password (local demo: export DB_PASSWORD=Test1234)." >&2; exit 1; }
 
 run_mongosh() {
-    docker exec -u documentdb "$CONTAINER_NAME" mongosh \
+    docdb_exec_as documentdb mongosh \
         "localhost:${PORT}/${DB}" -u "$USER" -p "$PASSWORD" \
         --authenticationMechanism SCRAM-SHA-256 --tls --tlsAllowInvalidCertificates \
         --quiet --eval "$1" 2>/dev/null

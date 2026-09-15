@@ -69,6 +69,25 @@ bash scripts/perf-advisor.sh             --db ecommerce
 bash scripts/data-integrity-check.sh     --db ecommerce
 ```
 
+### Windows
+
+Each diagnostic has a Python entry point and a PowerShell convenience wrapper:
+
+```powershell
+python scripts\document-bloat-advisor.py  --db contoso
+python scripts\toast-split-advisor.py     --db contoso
+.\scripts\index-redundancy-finder.ps1     --db ecommerce
+.\scripts\db-config-advisor.ps1           --db contoso
+.\scripts\perf-advisor.ps1                --db ecommerce
+.\scripts\data-integrity-check.ps1        --db ecommerce
+```
+
+Prerequisites are Python 3.10+ and Docker Desktop with the target Linux
+DocumentDB container running. Git Bash and WSL are not required. The portable
+launcher copies the selected read-only script into the container and runs it
+there, preserving the same CLI flags and JSON output contract as the Bash entry
+point.
+
 Add `--json` to any of them for a compact machine-readable result (what the router
 and agents consume):
 

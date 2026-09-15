@@ -32,6 +32,7 @@
 set -uo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "$SCRIPT_DIR/diagnostic-runtime.sh"
 
 CONTAINER_NAME="${CONTAINER_NAME:-documentdb-local}"
 PORT="${PORT:-10260}"
@@ -70,12 +71,12 @@ done
 [[ -z "$PASSWORD" ]] && { echo "Error: no password. Set DB_PASSWORD or pass --password (local demo: export DB_PASSWORD=Test1234)." >&2; exit 1; }
 
 run_mongosh() {
-    docker exec "$CONTAINER_NAME" mongosh "localhost:${PORT}/${DB}" \
+    docdb_exec_as "" mongosh "localhost:${PORT}/${DB}" \
         -u "$DB_USER_" -p "$PASSWORD" --authenticationMechanism SCRAM-SHA-256 \
         --tls --tlsAllowInvalidCertificates --quiet --eval "$1" 2>/dev/null
 }
 run_psql() {
-    docker exec "$CONTAINER_NAME" psql -h localhost -p "$PG_PORT" -U "$PG_USER" -d "$PG_DB" \
+    docdb_exec_as "" psql -h localhost -p "$PG_PORT" -U "$PG_USER" -d "$PG_DB" \
         -t --no-align -F $'\t' -c "$1" 2>/dev/null | grep -vE '^(SET|)$'
 }
 
@@ -146,6 +147,11 @@ done <<< "$SIZES"
 if [[ "${DEBUG:-0}" == "1" ]]; then
     { echo "── DEBUG: SIZES rows ──"; printf '%s\n' "$SIZES" | cat -A
       echo "── DEBUG: BUFFER ──"; printf '%s' "$BUFFER" | cat -A; } >&2
+fi
+
+if [[ "${DOCDB_PORTABLE_RAW:-0}" == "1" ]]; then
+    printf '%s' "$BUFFER"
+    exit 0
 fi
 
 # ── Build the report in Python (robust JSON assembly + float math) ──────────

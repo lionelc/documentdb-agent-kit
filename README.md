@@ -29,13 +29,14 @@ All are **read-only** (they never modify data) and **cross-layer** (MongoDB API 
 PostgreSQL engine). Each takes `--db <name>`; add `--json` for a compact
 machine-readable result (what the router consumes).
 
-| Script | Answers | `--json` |
+| Diagnostic | Answers | `--json` |
 |--------|---------|:--:|
-| `document-bloat-advisor.sh` | Which collections have large text TOASTed and detoasted on every scan; which field to split out. | ✅ |
-| `index-redundancy-finder.sh` | Redundant (prefix/duplicate/reverse) or unused indexes safe to drop. | ✅ |
-| `db-config-advisor.sh` | Working set vs cache, TOAST share, cache-hit ratios — evidence-based config review. | ✅ |
-| `perf-advisor.sh` | Overall health: collection-scan audit, query timing, PG I/O / locks / config. | ✅ |
-| `data-integrity-check.sh` | Orphaned foreign-key references and mixed-type fields (hard structural integrity). | ✅ |
+| `document-bloat-advisor` | Which collections have large text TOASTed and detoasted on every scan; which field to split out. | ✅ |
+| `toast-split-advisor` | Which large fields can move to a side collection and the projected hot-document size. | ✅ |
+| `index-redundancy-finder` | Redundant (prefix/duplicate/reverse) or unused indexes safe to drop. | ✅ |
+| `db-config-advisor` | Working set vs cache, TOAST share, cache-hit ratios — evidence-based config review. | ✅ |
+| `perf-advisor` | Overall health: collection-scan audit, query timing, PG I/O / locks / config. | ✅ |
+| `data-integrity-check` | Orphaned foreign-key references and mixed-type fields (hard structural integrity). | ✅ |
 
 Common flags: `--container NAME`, `--password PASS`, `--port`, `--pg-port`; env
 vars `DB_USER` / `DB_PASSWORD` / `PORT` / `PG_PORT` are also honored. **No password
@@ -61,6 +62,18 @@ bash scripts/index-redundancy-finder.sh --db ecommerce
 # 3. or ask in natural language — the router picks the tool (no LLM, no container)
 bash knowledge-base/kb-route.sh --db contoso "why are my aggregations slow even though I have indexes"
 ```
+
+The diagnostics also have host-portable Python and PowerShell entry points.
+They require Python 3.10+ and Docker Desktop, but do not require Bash or WSL:
+
+```powershell
+python scripts\document-bloat-advisor.py --db contoso
+.\scripts\index-redundancy-finder.ps1 --db ecommerce --json
+```
+
+The Python launcher executes the same read-only diagnostic logic inside the
+Linux DocumentDB container, so Linux, macOS, and Windows share one behavior
+contract.
 
 Demo datasets are seeders under [`scenarios/`](scenarios/) (they plant the
 problems the tools find). The kit is guarded by **two test loops** — deterministic

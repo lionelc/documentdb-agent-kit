@@ -26,7 +26,7 @@ testing free-form LLM output.
 
 ```
 seed fixture (known issues)  ──►  run kit script  ──►  assert vs contract
-   fixture.js                     scripts/*.sh          expected-findings.yaml
+   fixture.js                  scripts/*.py or *.sh     expected-findings.yaml
 ```
 
 ## Layout
@@ -84,11 +84,23 @@ cd testing && ../testing-venv/bin/python -m pytest scenarios/ecommerce-redundant
 cd testing && ../testing-venv/bin/python -m pytest --container my-docdb --keep-db
 ```
 
+On Windows, use Python or the matching PowerShell launcher:
+
+```powershell
+python scripts\perf-advisor.py --db ecommerce --json
+.\scripts\perf-advisor.ps1 --db ecommerce --json
+```
+
+The portable launcher requires Python 3.10+ and Docker Desktop, but does not
+require Git Bash or WSL. It executes the existing diagnostic logic inside the
+Linux DocumentDB container. Loop A uses these Python launchers on every
+platform.
+
 If the container isn't running, the whole suite **skips** (it does not fail).
 
 ## The regression loop (for skill/script changes)
 
-1. Edit a skill rule or a `scripts/*.sh` diagnostic.
+1. Edit a skill rule or a diagnostic under `scripts/` (`.sh`, `.py`, or `.ps1`).
 2. Run `pytest`. Green = behavior preserved.
 3. A red test means the change altered detection behavior. Either:
    - it's a **bug** → fix the script, or
