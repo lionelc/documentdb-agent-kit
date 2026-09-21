@@ -19,6 +19,7 @@ follows.
 from __future__ import annotations
 
 import json
+import re
 import tomllib
 from pathlib import Path
 
@@ -516,6 +517,18 @@ def test_oracle_workflow_uses_the_supported_build_entrypoint():
     assert "run: bash verify-controls.sh --only empty" in workflow
     assert "docker run --rm --name oracle" not in workflow
     assert "docker run --rm --name empty" not in workflow
+
+
+def test_azure_login_action_is_pinned_to_an_immutable_commit():
+    workflow = BENCHMARK_WORKFLOW.read_text()
+    match = re.search(r"uses:\s*azure/login@([0-9a-f]{40})(?:\s+#\s*(\S+))?", workflow)
+
+    assert match, (
+        "azure/login must be pinned to a full 40-character commit SHA, not a "
+        "mutable major-version tag"
+    )
+    assert match.group(1) == "7184910d9eb2b1c5e48f7073824a90609bb9b6d6"
+    assert match.group(2) == "v2.3.1"
 
 
 def test_build_entrypoint_stages_every_generated_docker_input():
