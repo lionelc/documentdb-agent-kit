@@ -1,22 +1,21 @@
 # Testing the agent kit
 
-The kit is tested in **three loops**. The first two have opposite success
-criteria — conflating them is the main design mistake to avoid — and the third
-is the publication layer.
+The kit is tested in **three complementary suites**. The first two have
+opposite success criteria — conflating them is the main design mistake to avoid
+— and the third is the publication layer.
 
-| | **Loop A — deterministic** | **Loop B — non-deterministic** |
-|---|---|---|
-| Subject | `scripts/*.sh`, `knowledge-base/kb-route.sh` | the text skills (`skills/**`) driving an agent |
-| Question | "Is the answer **stable and repeatable**?" | "Is the output **good**, and what did it **cost**?" |
-| Success | identical canonicalised `--json` across N runs | beats its own control arm, at N≈5 |
-| Runtime | ~2 min, **free** | minutes to hours, **costs AI credits** |
-| Home | [`testing/`](../testing/) | [`evals/`](../evals/) |
-| CI | every PR | dispatch / monthly only |
+| | **Diagnostic Regression Suite** | **Cross-Model Skill Evaluations** | **MSBench Skill-Efficacy Benchmark** |
+|---|---|---|---|
+| Subject | diagnostic scripts and router | text skills driving an agent | code produced by an agent |
+| Question | "Is the answer stable and repeatable?" | "Is the output good, and what did it cost?" | "Does the produced application satisfy the fixed rubric?" |
+| Success | identical canonicalised JSON and exact contracts | beats its control arm over repeated model runs | treatment/control `pass@k` delta |
+| Runtime | ~2 min, free | minutes to hours, costs AI credits | slow, Docker/gated platform access |
+| Home | [`testing/`](../testing/) | [`evals/`](../evals/) | [`benchmarks/`](../benchmarks/documentdb-sdk-skills/README.md) |
+| CI | every PR | dispatch/monthly | PR validation, manual publication |
 
-Plus **Loop C — MSBench** ([`benchmarks/`](../benchmarks/documentdb-sdk-skills/README.md)):
-a hermetic, externally-citable `pass@k` on Microsoft's benchmark platform. Slow,
-gated, and the only one that produces a number for external publication. Loops A
-and B are for iteration; Loop C is for citation.
+The Diagnostic Regression Suite and Cross-Model Skill Evaluations support
+iteration. The MSBench Skill-Efficacy Benchmark produces the externally
+citable result.
 
 A diagnostic script is a **tool**: the same database must give the same answer
 every time. An agent is not: it must be measured as a distribution against a
@@ -26,8 +25,8 @@ control. Applying either standard to the other produces nonsense.
 
 ## Prerequisites
 
-Loop A's `static` scenarios need **nothing at all**. Everything else needs a
-running container.
+The `static` scenarios in the Diagnostic Regression Suite need **nothing at
+all**. Everything else needs a running container.
 
 ```bash
 # 1. Start DocumentDB Local
@@ -68,7 +67,7 @@ docker inspect documentdb-local \
 
 ---
 
-## Loop A — deterministic tests
+## Diagnostic Regression Suite
 
 ```bash
 bash testing/run.sh                       # everything (~2 min) -> 86 passed
@@ -86,7 +85,7 @@ cd testing && pytest scenarios/token-accounting scenarios/evals-config
 ```
 
 They override the container fixture with a no-op. Use them for a fast check that
-the cost metrics and the Loop B configs are still sane.
+the cost metrics and the Cross-Model Skill Evaluations configs are still sane.
 
 ### Individual scenarios
 
@@ -136,7 +135,7 @@ banner and measured latencies by design.
 
 ---
 
-## Loop B — cross-model skill evals
+## Cross-Model Skill Evaluations
 
 Runs on [Vally](https://microsoft.github.io/vally/). **Everything below the
 `lint`/`plan` line costs AI credits.**
@@ -145,10 +144,10 @@ Runs on [Vally](https://microsoft.github.io/vally/). **Everything below the
 cd evals && npm ci
 ```
 
-Loop B has **two** evals: `documentdb-skills/eval.yaml` asks whether the right
-skill fires (binary, reproducible), and `documentdb-quality/quality-eval.yaml`
-asks whether the guidance is any good (blinded cross-model judge panel, not
-reproducible by construction).
+The suite has **two** evals: `documentdb-skills/eval.yaml` asks whether the
+right skill fires (binary, reproducible), and
+`documentdb-quality/quality-eval.yaml` asks whether the guidance is any good
+(blinded cross-model judge panel, not reproducible by construction).
 
 ### Free — always do these first
 
@@ -193,7 +192,7 @@ the agent to read; the treatment has them on disk but is **never told to use
 them**. For cost, that makes the input-token delta the literal price of the kit
 being available and used.
 
-### Two rules for reading Loop B results
+### Two rules for reading Cross-Model Skill Evaluations results
 
 1. **Only deltas are publishable.** An absolute pass-rate is uninterpretable —
    "90% passed" means nothing without knowing what a bare agent scores on the
@@ -234,7 +233,7 @@ Three things this table is built to stop you getting wrong:
 
 ---
 
-## Loop C — MSBench benchmark
+## MSBench Skill-Efficacy Benchmark
 
 The publication layer. See
 [`benchmarks/documentdb-sdk-skills/README.md`](../benchmarks/documentdb-sdk-skills/README.md).
@@ -246,7 +245,8 @@ cd testing && pytest scenarios/benchmark-config scenarios/benchmark-metrics
 ```
 
 Validates the registration files, the Harbor task layout, that the instruction
-contains **no solution hints**, and that the cost metrics agree with Loop B's.
+contains **no solution hints**, and that the cost metrics agree with the
+Cross-Model Skill Evaluation cost module.
 No Docker, no MSBench access, no network.
 
 ### Local — needs Docker
@@ -323,8 +323,8 @@ reproducible and hardest to satisfy accidentally.
 
 This is about fit, not about avoiding judges. LLM-as-a-judge is a normal grader
 and the right tool for qualities that are genuinely matters of degree (is the
-explanation clear? is the guidance well-targeted?), which is why Loop B uses
-one. It just cannot serve a scenario whose purpose is to prove **repeatability**,
+explanation clear? is the guidance well-targeted?), which is why Cross-Model Skill Evaluations use one. It just cannot serve a
+scenario whose purpose is to prove **repeatability**,
 because the same input can score differently across runs. Where an outcome is
 measurable in the system, measure it; where it is a judgement, judge it.
 
@@ -348,15 +348,15 @@ everything" fails, and asserts the result set is unchanged.
 
 | Workflow | Trigger | Cost |
 |---|---|---|
-| [`loop-a-tests.yml`](../.github/workflows/loop-a-tests.yml) | push, PR, dispatch | free |
-| [`loop-b-evals.yml`](../.github/workflows/loop-b-evals.yml) | dispatch, monthly | credits |
-| [`loop-c-benchmark.yml`](../.github/workflows/loop-c-benchmark.yml) | PR (validate only), dispatch | free / Docker / gated |
+| [`diagnostic-regression.yml`](../.github/workflows/diagnostic-regression.yml) | push, PR, dispatch | free |
+| [`skill-evaluations.yml`](../.github/workflows/skill-evaluations.yml) | dispatch, monthly | credits |
+| [`skill-efficacy-benchmark.yml`](../.github/workflows/skill-efficacy-benchmark.yml) | PR (validate only), dispatch | free / Docker / gated |
 
-Loop B's `validate` job (static guards + `vally lint` + matrix resolve) always
-runs and is free, so a broken skill path is caught **before** any credits are
-spent. That matters: `vally --dry-run` validates matrix structure but **not**
-skill paths, and a treatment arm whose skills fail to load is silently just a
-second control arm.
+The `validate` job in Cross-Model Skill Evaluations (static guards +
+`vally lint` + matrix resolution) always runs and is free, so a broken skill
+path is caught **before** any credits are spent. That matters:
+`vally --dry-run` validates matrix structure but **not** skill paths, and a
+treatment arm whose skills fail to load is silently just a second control arm.
 
 Use the `dry_run` input to validate the matrix from CI for free.
 

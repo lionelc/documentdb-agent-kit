@@ -1,4 +1,4 @@
-"""Determinism contract (Loop A) — the deterministic half of the kit's testing.
+"""Determinism contract (Diagnostic Regression Suite) — the deterministic half of the kit's testing.
 
 The diagnostic scripts are *tools*, not agents: given the same database state
 they must return the same answer every time. This scenario runs each script

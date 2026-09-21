@@ -1,4 +1,4 @@
-# Scenario: Determinism (Loop A)
+# Scenario: Determinism (Diagnostic Regression Suite)
 
 > **The deterministic half of the kit's testing.** The diagnostic scripts are
 > *tools*, not agents: given the same database state they must return the same

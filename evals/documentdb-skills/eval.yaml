@@ -1,4 +1,4 @@
-# eval.yaml — DocumentDB skill-efficacy eval (Loop B)
+# eval.yaml — DocumentDB skill-efficacy eval (Cross-Model Skill Evaluations)
 #
 # Phase 1 scope: does the RIGHT skill activate for a given phrasing, and — just
 # as important — does NO DocumentDB skill activate for an unrelated question?

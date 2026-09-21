@@ -1,10 +1,11 @@
-# DocumentDB Agent-Kit — Regression Test Framework
+# Diagnostic Regression Suite
 
-> **This is Loop A — the deterministic half.** The kit tests two different
+> **This is the Diagnostic Regression Suite — the deterministic half.** The kit tests two different
 > things: `testing/` (here) proves the **diagnostic scripts** return the *same*
 > answer every time, while [`../evals/`](../evals/) measures whether the **text
 > skills** make an agent produce *better* output, and at what token cost.
-> Loop A is free and runs on every PR; Loop B costs AI credits.
+> The Diagnostic Regression Suite is free and runs on every PR;
+> Cross-Model Skill Evaluations cost AI credits.
 > See [`scenarios/determinism/`](scenarios/determinism/) for the repeatability
 > contract.
 
@@ -93,8 +94,8 @@ python scripts\perf-advisor.py --db ecommerce --json
 
 The portable launcher requires Python 3.10+ and Docker Desktop, but does not
 require Git Bash or WSL. It executes the existing diagnostic logic inside the
-Linux DocumentDB container. Loop A uses these Python launchers on every
-platform.
+Linux DocumentDB container. The Diagnostic Regression Suite uses these Python
+launchers on every platform.
 
 If the container isn't running, the whole suite **skips** (it does not fail).
 

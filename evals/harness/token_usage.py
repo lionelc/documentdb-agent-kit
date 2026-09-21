@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
-"""Task-level token / AI-credit accounting for Loop B.
+"""Task-level token / AI-credit accounting for Cross-Model Skill Evaluations.
 
 WHY THIS EXISTS
 ---------------
-Loop B asks two questions about the text skills: *is the output good* and *what
-did it cost*. Vally answers both, but only when a real model executor is
-available. This module answers the cost half from data the Copilot CLI already
-writes locally, so cost can be measured today and cross-checked against Vally
-later. It is stdlib-only and read-only.
+Cross-Model Skill Evaluations ask two questions about the text skills: *is the
+output good* and *what did it cost*. Vally answers both, but only when a real
+model executor is available. This module answers the cost half from data the
+Copilot CLI already writes locally, so cost can be measured today and
+cross-checked against Vally later. It is stdlib-only and read-only.
 
 Source: ``~/.copilot/session-store.db`` (SQLite), table
 ``assistant_usage_events`` — one row per model request:
@@ -308,7 +308,7 @@ def render_table(comparison: dict) -> str:
 # --------------------------------------------------------------------------
 def main(argv=None) -> int:
     p = argparse.ArgumentParser(
-        description="Task-level token / AI-credit accounting for Loop B."
+        description="Task-level token / AI-credit accounting for Cross-Model Skill Evaluations."
     )
     p.add_argument("--db", type=Path, default=DEFAULT_DB,
                    help=f"session store path (default: {DEFAULT_DB})")

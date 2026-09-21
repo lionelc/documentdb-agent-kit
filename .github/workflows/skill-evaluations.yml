@@ -1,7 +1,7 @@
-name: Loop B — cross-model skill evals
+name: Cross-Model Skill Evaluations
 
-# Loop B measures the text skills against real models: does the kit change what
-# an agent does, and what does it cost?
+# Cross-Model Skill Evaluations measure the text skills against real models:
+# does the kit change what an agent does, and what does it cost?
 #
 # NEVER runs on push or pull_request. Every execution spends AI credits, and the
 # full matrix is 3 models x 2 arms x 5 runs = 30 trials PER STIMULUS. It is
@@ -101,7 +101,7 @@ jobs:
           TOKEN: ${{ secrets.COPILOT_SDK_AUTH_TOKEN }}
         run: |
           if [ -z "$TOKEN" ]; then
-            echo "::error::COPILOT_SDK_AUTH_TOKEN is not configured. Loop B "\
+            echo "::error::COPILOT_SDK_AUTH_TOKEN is not configured. Cross-Model Skill Evaluations "\
                  "cannot run real models without it. Add the secret, or use "\
                  "dry_run to validate the matrix for free."
             exit 1
@@ -146,7 +146,7 @@ jobs:
         if: always()
         run: |
           {
-            echo "## Loop B — cross-model results"
+            echo "## Cross-Model Skill Evaluation results"
             echo
             echo "Matrix: 3 models x {kit, control}. **Read the deltas, not the"
             echo "absolute scores** — an absolute pass-rate is uninterpretable"

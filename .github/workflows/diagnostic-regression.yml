@@ -1,11 +1,11 @@
-name: Loop A — deterministic tests
+name: Diagnostic Regression Suite
 
-# Loop A is the deterministic half of the kit's testing: the diagnostic scripts
-# are TOOLS, not agents, so given the same database state they must return the
-# same answer every time. It is fast, free and runs on every PR.
+# The Diagnostic Regression Suite is the deterministic half of the kit's
+# testing. Diagnostic scripts are tools, not agents, so the same database state
+# must return the same answer every time. It is fast, free and runs on every PR.
 #
-# Loop B (cross-model skill evals) is deliberately NOT here — it costs AI
-# credits. See loop-b-evals.yml, which is dispatch/schedule only.
+# Cross-Model Skill Evaluations are deliberately NOT here — they cost AI
+# credits. See skill-evaluations.yml, which is dispatch/schedule only.
 
 on:
   push:

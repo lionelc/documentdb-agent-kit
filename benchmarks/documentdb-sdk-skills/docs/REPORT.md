@@ -188,7 +188,7 @@ cat /tmp/out/custom_metrics.json
 | What does a task cost with vs without the kit? | ⬜ **unknown** |
 | Which check categories does the kit move? | ⬜ **unknown** |
 | `pass@k` reliability across attempts | ⬜ **unknown** |
-| Does it hold across models? | ⬜ out of scope here (that is Loop B) |
+| Does it hold across models? | ⬜ out of scope here (that is Cross-Model Skill Evaluations) |
 
 Blocking work, in order:
 
@@ -281,7 +281,7 @@ solutions."* Three blind spots:
 
 Not here. The verifier runs offline in a task container with no model access,
 and the reward is binary, so a judge would fit badly. Qualitative assessment
-belongs in **Loop B**, which drives real models and has native support for
+belongs in **Cross-Model Skill Evaluations**, which drives real models and has native support for
 `panel` / prompt graders.
 
 **Status: built** — [`evals/documentdb-quality/quality-eval.yaml`](../../../evals/documentdb-quality/quality-eval.yaml)
@@ -293,10 +293,10 @@ So the division of labour across the kit is now:
 
 | Claim | Evidence | Where |
 |---|---|---|
-| "the scripts are reproducible" | byte-identical output | Loop A |
-| "the right skill fires" | `skill-invocation`, binary | Loop B, `eval.yaml` |
-| **"the guidance is better"** | **blinded judge panel** | **Loop B, `quality-eval.yaml`** |
-| "the produced code follows best practice" | 30 deterministic checks | Loop C, this benchmark |
+| "the scripts are reproducible" | byte-identical output | Diagnostic Regression Suite |
+| "the right skill fires" | `skill-invocation`, binary | Cross-Model Skill Evaluations, `eval.yaml` |
+| **"the guidance is better"** | **blinded judge panel** | **Cross-Model Skill Evaluations, `quality-eval.yaml`** |
+| "the produced code follows best practice" | 30 deterministic checks | MSBench Skill-Efficacy Benchmark, this benchmark |
 
 This benchmark still cannot speak to guidance quality — that is not its job, and
 the quality eval now covers it.
@@ -501,10 +501,10 @@ The per-instance token metrics travel inside those exports: the verifier writes
 
 ---
 
-### Stage 7 — Guidance quality (Loop B, not MSBench)
+### Stage 7 — Guidance quality (Cross-Model Skill Evaluations, not MSBench)
 
 MSBench grades produced code against a fixed rubric. It cannot say whether the
-*advice* was good — that lives in Loop B:
+*advice* was good — that lives in Cross-Model Skill Evaluations:
 
 ```bash
 cd evals && npm ci
@@ -522,7 +522,8 @@ cd testing && pytest scenarios/benchmark-config scenarios/benchmark-metrics
 
 Validates the registration files, the Harbor layout, that `instruction.md`
 leaks no hints, that the verifier parses as Python 3.10 (the image's
-interpreter), and that the cost metrics agree with Loop B's — all with no
+interpreter), and that the cost metrics agree with the Cross-Model Skill
+Evaluation cost module — all with no
 Docker, credentials or network.
 
 ---
@@ -594,16 +595,16 @@ docker run --rm -v "$PWD/tests:/tests:ro" -v "$PWD/solution:/solution:ro" \
 python3 benchmarks/documentdb-sdk-skills/shared/verifier/harvest_metrics.py \
   --store ~/.copilot/session-store.db --output-dir /tmp/out && cat /tmp/out/custom_metrics.json
 
-# the Loop B equivalent (same cost definitions, pinned equal by test)
+# the Cross-Model Skill Evaluations equivalent (same cost definitions, pinned equal by test)
 python3 evals/harness/token_usage.py sessions --limit 10
 
 # the guards on all of the above
 cd testing && pytest scenarios/benchmark-metrics scenarios/benchmark-config
 ```
 
-The two cost implementations (`harvest_metrics.py` for Loop C,
-`evals/harness/token_usage.py` for Loop B) cannot share an import — the
+The two cost implementations (`harvest_metrics.py` for MSBench Skill-Efficacy Benchmark,
+`evals/harness/token_usage.py` for Cross-Model Skill Evaluations) cannot share an import — the
 harvester must run inside a minimal task container — so
-`test_harvester_agrees_with_the_loop_b_cost_module` pins them to identical
+`test_harvester_agrees_with_the_skill_evaluation_cost_module` pins them to identical
 output instead. If they ever diverge, that test fails rather than the two
 publishing different costs for the same run.

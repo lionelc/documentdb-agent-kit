@@ -1,7 +1,8 @@
-name: Loop C — MSBench benchmark
+name: MSBench Skill-Efficacy Benchmark
 
-# Loop C is the PUBLICATION loop: a hermetic, externally-citable pass@k for the
-# DocumentDB agent kit, run on Microsoft's MSBench platform.
+# The MSBench Skill-Efficacy Benchmark is the publication layer: a hermetic,
+# externally-citable pass@k for the DocumentDB agent kit, run on Microsoft's
+# MSBench platform.
 #
 # Split by what each job needs:
 #
@@ -82,37 +83,26 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Build the base image
+      - name: Stage inputs and build benchmark images
         working-directory: benchmarks/documentdb-sdk-skills
-        run: docker build -f shared/base/Dockerfile -t documentdb-orders-base:latest .
-
-      - name: Build the task image
-        working-directory: benchmarks/documentdb-sdk-skills/tasks/orders-api-python
-        run: docker build -f environment/Dockerfile -t documentdb-orders-api-python:latest .
+        # build.sh stages the ignored .skills/ and .wheels/ build inputs before
+        # invoking Docker. Calling either Dockerfile directly fails in a clean
+        # checkout because those generated directories do not exist.
+        run: bash build.sh
 
       - name: Oracle must score 1
         # The positive control. If this fails, the grader is impossible to
         # satisfy and every measured score is meaningless.
-        run: |
-          docker run --rm --name oracle documentdb-orders-api-python:latest \
-            bash -c '/solution/solve.sh && /tests/test.sh; cat /logs/verifier/reward.txt' \
-            | tee /tmp/oracle.log
-          grep -qx "1" <(tail -1 /tmp/oracle.log) || {
-            echo "::error::Oracle did not score 1 — the grader cannot be satisfied."
-            exit 1
-          }
+        working-directory: benchmarks/documentdb-sdk-skills
+        # The image intentionally does not bake /solution or /tests. The
+        # control runner mounts them read-only and asserts the reward.
+        run: bash verify-controls.sh --only oracle
 
       - name: Empty submission must score 0
         # The negative control. A grader that never fails is worthless, and this
         # is the cheapest possible proof that it can.
-        run: |
-          docker run --rm --name empty documentdb-orders-api-python:latest \
-            bash -c '/tests/test.sh; cat /logs/verifier/reward.txt' \
-            | tee /tmp/empty.log
-          if grep -qx "1" <(tail -1 /tmp/empty.log); then
-            echo "::error::An EMPTY /app scored 1. The grader does not discriminate."
-            exit 1
-          fi
+        working-directory: benchmarks/documentdb-sdk-skills
+        run: bash verify-controls.sh --only empty
 
   # -------------------------------------------------------------------------
   publish:
@@ -166,7 +156,7 @@ jobs:
         if: always()
         run: |
           {
-            echo "## Loop C — MSBench"
+            echo "## MSBench Skill-Efficacy Benchmark"
             echo
             echo "Report the **delta** between \`documentdb-sdk-skills\` (kit"
             echo "installed, never mentioned) and \`documentdb-sdk-skills-noskills\`"

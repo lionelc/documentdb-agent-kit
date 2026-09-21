@@ -1,4 +1,4 @@
-"""Canonicalisation helpers for the determinism loop (Loop A).
+"""Canonicalisation helpers for the Diagnostic Regression Suite.
 
 A diagnostic script is "deterministic" when the SAME database state yields the
 SAME `--json` result. Two kinds of legitimate drift must be normalised away

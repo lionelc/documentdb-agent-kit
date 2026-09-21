@@ -1,4 +1,4 @@
-"""Contract tests for evals/harness/token_usage.py (Loop B cost accounting).
+"""Contract tests for evals/harness/token_usage.py (Cross-Model Skill Evaluations cost accounting).
 
 These tests exist because the cost numbers are the ones that will end up in a
 GTM claim, and a quietly wrong denominator is the easiest way to publish a false

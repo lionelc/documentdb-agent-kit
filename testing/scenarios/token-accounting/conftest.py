@@ -14,8 +14,8 @@ from pathlib import Path
 
 import pytest
 
-# The module under test lives in the Loop B folder (it measures agent cost), but
-# it is plain stdlib Python, so Loop A can and should regression-test it.
+# The module under test lives in the Cross-Model Skill Evaluations folder (it measures agent cost), but
+# it is plain stdlib Python, so Diagnostic Regression Suite can and should regression-test it.
 HARNESS = Path(__file__).resolve().parents[3] / "evals" / "harness"
 sys.path.insert(0, str(HARNESS))
 

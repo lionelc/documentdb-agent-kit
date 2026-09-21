@@ -258,7 +258,7 @@ Verified by running, not by inspection:
 | Registration matches the live platform schema | ✅ read from the central repo; asserted by tests |
 | Task follows the Harbor layout | ✅ asserted by tests |
 | Instruction contains no hints | ✅ asserted (mutation-verified) |
-| Cost metrics agree with the Loop B module | ✅ asserted (mutation-verified) |
+| Cost metrics agree with the Cross-Model Skill Evaluations module | ✅ asserted (mutation-verified) |
 | Verifier parses as Python 3.10 (the image's interpreter) | ✅ asserted in CI |
 | Images build | ✅ base + task, offline from vendored wheels |
 | **Oracle scores 1** | ✅ **REWARD=1, 31 checks passed** |

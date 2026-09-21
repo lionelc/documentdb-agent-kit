@@ -1,6 +1,7 @@
 # Scenario: token accounting
 
-**Loop:** A (deterministic) — but it guards a **Loop B** component.
+**Suite:** Diagnostic Regression Suite — guarding a Cross-Model Skill
+Evaluations component.
 **Infrastructure:** none. No container, no credentials, no network.
 
 ## What it guards
@@ -31,9 +32,10 @@ Two further properties are asserted because they were easy to get wrong:
 
 ## Why it lives in `testing/` and not `evals/`
 
-The module belongs to Loop B (it measures agent cost), but it is pure stdlib
-arithmetic over a synthetic SQLite file — perfectly deterministic. Loop A is
-where deterministic things are proven, so that is where its contract lives.
+The module belongs to Cross-Model Skill Evaluations (it measures agent cost),
+but it is pure stdlib arithmetic over a synthetic SQLite file — perfectly
+deterministic. The Diagnostic Regression Suite is where deterministic things
+are proven, so that is where its contract lives.
 
 The scenario's `conftest.py` overrides the root `require_container` fixture with
 a no-op, which is what makes it infrastructure-free. That is deliberate: it lets

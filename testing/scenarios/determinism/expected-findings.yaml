@@ -1,4 +1,4 @@
-# expected-findings.yaml — determinism (Loop A)
+# expected-findings.yaml — determinism (Diagnostic Regression Suite)
 #
 # Contract: every diagnostic script, given the SAME database state, must return
 # the SAME `--json` result on repeated runs.

@@ -1,4 +1,4 @@
-"""Static validation of the Loop B eval + experiment configs.
+"""Static validation of the Cross-Model Skill Evaluations eval + experiment configs.
 
 WHY THIS EXISTS
 ---------------
@@ -191,8 +191,9 @@ def test_every_stimulus_has_a_grader(spec):
 def test_graders_are_objective(spec):
     """Phase 1 stimuli should be graded reproducibly.
 
-    Not a prohibition on LLM judges — they are a normal grader and Loop B is
-    expected to use one for qualitative dimensions. But the Phase 1 stimuli are
+    Not a prohibition on LLM judges — they are a normal grader and
+    Cross-Model Skill Evaluations are expected to use one for qualitative
+    dimensions. But the Phase 1 stimuli are
     all skill-TRIGGERING checks, which have a definite right answer, so a
     reproducible grader is the correct fit and a judge here would add cost and
     variance for nothing.

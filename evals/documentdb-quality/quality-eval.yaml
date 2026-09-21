@@ -1,12 +1,12 @@
-# quality-eval.yaml — Loop B: is the GUIDANCE any good?
+# quality-eval.yaml — Cross-Model Skill Evaluations: is the GUIDANCE any good?
 #
 # WHY THIS FILE EXISTS
 # --------------------
 # Everything else the kit measures is conformance:
 #
-#   Loop A (testing/)     do the scripts return a stable answer?
-#   Loop B (eval.yaml)    does the RIGHT SKILL FIRE for a given phrasing?
-#   Loop C (benchmarks/)  does the produced code satisfy 30 fixed checks?
+#   Diagnostic Regression Suite (testing/)     do the scripts return a stable answer?
+#   Cross-Model Skill Evaluations (eval.yaml)    does the RIGHT SKILL FIRE for a given phrasing?
+#   MSBench Skill-Efficacy Benchmark (benchmarks/)  does the produced code satisfy 30 fixed checks?
 #
 # None of those can tell you whether the advice was actually GOOD. A skill can
 # trigger perfectly and give poor guidance; code can satisfy every rule in our

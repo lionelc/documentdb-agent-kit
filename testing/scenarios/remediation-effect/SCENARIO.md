@@ -1,12 +1,12 @@
 # Scenario: remediation effect (before/after grading)
 
-**Loop:** A (deterministic)
+**Suite:** Diagnostic Regression Suite
 **Grading rung:** *measured before/after delta* — chosen because this scenario's
 job is to prove determinism, which a judge cannot do.
 
 ## The idea
 
-LLM-as-a-judge is a normal and useful grader, and this kit uses it in Loop B for
+LLM-as-a-judge is a normal and useful grader, and this kit uses it in Cross-Model Skill Evaluations for
 things that are genuinely a matter of degree — is the explanation clear, is the
 guidance well-targeted. What it cannot give us is **repeatability**: the same
 input can score differently across runs, so a judge is the wrong instrument for
@@ -24,7 +24,7 @@ The rule of thumb across the kit is to pick the strongest criterion the scenario
 |---|---|
 | The outcome is measurable in the system (plans, counters, result sets) | measure it — this scenario |
 | The outcome is structural (an index exists, a key order) | assert it |
-| The outcome is irreducibly qualitative (was the advice well explained?) | LLM-as-a-judge, blinded and cross-model (Loop B) |
+| The outcome is irreducibly qualitative (was the advice well explained?) | LLM-as-a-judge, blinded and cross-model (Cross-Model Skill Evaluations) |
 
 Judges are used where they are the right tool; here a measurement was available,
 and a measurement is what a determinism proof needs.

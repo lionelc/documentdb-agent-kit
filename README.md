@@ -15,6 +15,21 @@ Skills follow the [Agent Skills](https://agentskills.io/) format and the kit shi
 
 👉 **Capabilities and skill catalog:** [`docs/SKILLS.md`](docs/SKILLS.md)
 
+👉 **GEO strategy:** [`docs/GEO.md`](docs/GEO.md) — offline knowledge,
+online/RAG retrieval, and Azure DocumentDB name disambiguation.
+
+👉 **Telemetry diagnosis plan:** [`docs/TELEMETRY-DIAGNOSTICS.md`](docs/TELEMETRY-DIAGNOSTICS.md)
+— open-source telemetry, anomaly detection, and the Azure extension path.
+
+👉 **MongoDB migration plan:** [`docs/MONGODB-MIGRATION.md`](docs/MONGODB-MIGRATION.md)
+— minimal, non-interactive, fail-closed migration with validation and rollback.
+
+👉 **Migration agent harness:** [`docs/MIGRATION-HARNESS.md`](docs/MIGRATION-HARNESS.md)
+— one typed workflow for local/open-source and Azure cloud migration providers.
+
+👉 **Migration quick plan:** [`docs/MIGRATION-QUICK-PLAN.md`](docs/MIGRATION-QUICK-PLAN.md)
+— concise scenario-to-technique matrix and harness summary.
+
 ## Diagnostic Toolbox — Quickstart
 
 Beyond the text skills, the kit ships **deterministic diagnostic scripts** and a
@@ -100,10 +115,10 @@ scripts/                 # diagnostic toolbox — read-only analyzers + seeders
 knowledge-base/          # NL → script router (kb.json + kb_route.py) + demo
 scenarios/contoso/       # ready-to-run TOAST demo dataset (+ optional scaling-benchmark/)
 compat/                  # MongoDB-compatible ecommerce project on DocumentDB
-testing/                 # Loop A — deterministic tests for the scripts (pytest)
-evals/                   # Loop B — cross-model skill evals (Vally) + cost accounting
-benchmarks/              # Loop C — MSBench skill-efficacy benchmark + route-cost study
-docs/                    # SKILLS.md (catalog), DIAGNOSTICS.md (toolbox), TESTING.md
+testing/                 # Diagnostic Regression Suite — deterministic diagnostics (pytest)
+evals/                   # Cross-Model Skill Evaluations — routing, quality, and cost (Vally)
+benchmarks/              # MSBench Skill-Efficacy Benchmark + route-cost study
+docs/                    # Skills, diagnostics, testing, installation, and GEO guidance
 ```
 
 ## Installation

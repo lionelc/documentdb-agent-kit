@@ -1,4 +1,4 @@
-"""Static validation of the MSBench benchmark (Loop C).
+"""Static validation of the MSBench benchmark (MSBench Skill-Efficacy Benchmark).
 
 WHY THIS EXISTS
 ---------------
@@ -32,6 +32,9 @@ BENCH = kit.REPO_DIR / "benchmarks" / "documentdb-sdk-skills"
 REG = BENCH / "msbench-registration"
 TREATMENT = "documentdb-sdk-skills"
 CONTROL = "documentdb-sdk-skills-noskills"
+BENCHMARK_WORKFLOW = (
+    kit.REPO_DIR / ".github" / "workflows" / "skill-efficacy-benchmark.yml"
+)
 
 # The keys the live platform's registry.json files carry. Cosmos' registration
 # has none of this — it predates the requirement — which is exactly why it is
@@ -492,6 +495,38 @@ def test_verify_controls_script_checks_both_directions():
             f"verify-controls.sh does not assert {name} -> reward {expected}"
         )
     assert "exit 1" in script, "the script must fail the build when a control deviates"
+
+
+def test_oracle_workflow_uses_the_supported_build_entrypoint():
+    """A clean checkout has no generated .skills/ or .wheels/ directories.
+
+    The base Dockerfile copies both, so invoking `docker build` directly from
+    the workflow fails before the oracle runs. `build.sh` is the single
+    supported entry point because it stages both inputs and copies the wheels
+    into the task-image context.
+    """
+    workflow = BENCHMARK_WORKFLOW.read_text()
+    build_step = workflow.index("run: bash build.sh")
+    oracle_step = workflow.index("- name: Oracle must score 1")
+
+    assert build_step < oracle_step
+    assert "docker build -f shared/base/Dockerfile" not in workflow
+    assert "docker build -f environment/Dockerfile" not in workflow
+    assert "run: bash verify-controls.sh --only oracle" in workflow
+    assert "run: bash verify-controls.sh --only empty" in workflow
+    assert "docker run --rm --name oracle" not in workflow
+    assert "docker run --rm --name empty" not in workflow
+
+
+def test_build_entrypoint_stages_every_generated_docker_input():
+    dockerfile = (BENCH / "shared" / "base" / "Dockerfile").read_text()
+    build = (BENCH / "build.sh").read_text()
+
+    assert "COPY .wheels " in dockerfile
+    assert "COPY .skills " in dockerfile
+    assert 'bash shared/base/vendor-wheels.sh .wheels' in build
+    assert 'cp -r "$REPO/skills/." .skills/' in build
+    assert 'cp -r .wheels tasks/orders-api-python/.wheels' in build
 
 
 # ---------------------------------------------------------------------------

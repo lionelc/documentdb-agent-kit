@@ -1,17 +1,17 @@
-# `evals/` — Loop B: skill-efficacy evaluation
+# Cross-Model Skill Evaluations
 
 > **Two folders, two questions.** This repo tests two fundamentally different
 > things, and conflating them is the mistake to avoid:
 >
-> | Folder | Loop | Question | Success looks like |
+> | Folder | Suite | Question | Success looks like |
 > |---|---|---|---|
-> | [`../testing/`](../testing/) | **A — deterministic** | Do the **diagnostic scripts** return the *same* answer every time? | byte-identical `--json` across 3 runs |
-> | **`evals/`** (here) | **B — non-deterministic** | Do the **text skills** make an agent produce *better* output, and at what cost? | higher quality / lower cost than a control run |
+> | [`../testing/`](../testing/) | **Diagnostic Regression Suite** | Do the **diagnostic scripts** return the *same* answer every time? | byte-identical `--json` across 3 runs |
+> | **`evals/`** (here) | **Cross-Model Skill Evaluations** | Do the **text skills** make an agent produce *better* output, and at what cost? | higher quality / lower cost than a control run |
 >
-> Loop A is free, fast, and runs on every PR. Loop B costs AI credits and is run
-> deliberately.
+> The Diagnostic Regression Suite is free, fast, and runs on every PR.
+> Cross-Model Skill Evaluations cost AI credits and are run deliberately.
 
-Loop B is built on **[Vally](https://aka.ms/vally)** (`@microsoft/vally-cli`,
+Cross-Model Skill Evaluations are built on **[Vally](https://aka.ms/vally)** (`@microsoft/vally-cli`,
 MIT, pinned in [`package.json`](package.json)) — Microsoft's evaluation platform
 for AI agents. Vally gives us, natively: multi-model runs, skills on/off
 variants, an objective **`skill-invocation`** grader, real token/AI-credit
@@ -129,15 +129,16 @@ criterion, so style can never outvote accuracy.
 
 ## Grading policy — match the grader to the claim
 
-LLM-as-a-judge is a legitimate and widely used grader, and Loop B relies on one
-for the qualitative dimensions no assertion can capture. The ordering below is
+LLM-as-a-judge is a legitimate and widely used grader, and Cross-Model Skill
+Evaluations rely on one for the qualitative dimensions no assertion can
+capture. The ordering below is
 about **fit**: prefer a criterion that is reproducible and hard to satisfy by
 accident, and reach for a judge when the thing being graded is genuinely a
 matter of degree rather than a fact about the system.
 
 Prefer, in order:
 
-1. deterministic / exact match → `../testing/` (Loop A)
+1. deterministic / exact match → `../testing/` (Diagnostic Regression Suite)
 2. **measured before/after delta** → apply the advice, re-measure (`run-command`)
 3. structural assertion on the artifact → `program`, `file-matches`
 4. semantic equivalence vs a golden output
@@ -161,4 +162,4 @@ identifier) **by default**. Always export `VALLY_TELEMETRY_OPTOUT=1` /
   skills vs control, `--runs 5` (`vally experiment` + `vally compare`)
 - Before/after graders that apply a recommended index and re-measure `explain()`,
   paired with `index-redundancy-finder.sh --json` as an anti-gaming guard
-- CI: Loop A every PR; Loop B on dispatch/schedule
+- CI: Diagnostic Regression Suite every PR; Cross-Model Skill Evaluations on dispatch/schedule

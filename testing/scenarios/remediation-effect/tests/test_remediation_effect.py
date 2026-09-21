@@ -4,7 +4,7 @@ WHY THIS SCENARIO EXISTS
 ------------------------
 "Did the skill help?" is often answered by asking a model to judge the answer,
 and that is a reasonable grader for qualities that are matters of degree. This
-kit uses one in Loop B for exactly that.
+kit uses one in Cross-Model Skill Evaluations for exactly that.
 
 It is the wrong instrument HERE, though, for a specific reason: this suite lives
 in the deterministic loop, and its job is to show the diagnostic scripts return

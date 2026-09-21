@@ -1,7 +1,7 @@
 {
   "name": "documentdb-agent-kit-evals",
   "private": true,
-  "description": "Loop B \u2014 skill-efficacy evals for the DocumentDB agent kit, run with Vally",
+  "description": "Cross-Model Skill Evaluations \u2014 skill-efficacy evals for the DocumentDB agent kit, run with Vally",
   "scripts": {
     "lint": "vally lint -e documentdb-skills/eval.yaml",
     "eval:mock": "vally eval -e documentdb-skills/eval.yaml --executor mock",

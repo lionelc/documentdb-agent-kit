@@ -9,10 +9,10 @@ diagnostic into the Linux DocumentDB container and runs the established logic
 there through a direct-command transport, preserving the existing flags and
 JSON contracts.
 
-Loop A now invokes the portable Python entry points on Linux as well, includes
-Bash-versus-portable JSON-shape parity checks, covers the TOAST split advisor's
-JSON shape, and runs infrastructure-free launcher contracts on
-`windows-latest`.
+The Diagnostic Regression Suite now invokes the portable Python entry points
+on Linux as well, includes Bash-versus-portable JSON-shape parity checks,
+covers the TOAST split advisor's JSON shape, and runs infrastructure-free
+launcher contracts on `windows-latest`.
 
 ## 2026-05-27 — Mark project as Public Preview
 

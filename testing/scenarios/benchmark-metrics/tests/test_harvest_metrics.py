@@ -1,4 +1,4 @@
-"""Contract tests for the MSBench cost-metric harvester (Loop C).
+"""Contract tests for the MSBench cost-metric harvester (MSBench Skill-Efficacy Benchmark).
 
 WHY THIS SCENARIO EXISTS
 ------------------------
@@ -10,12 +10,13 @@ per-instance `custom_metrics.json`.
 Two failure modes make those numbers dangerous rather than merely absent, and
 both are pinned here:
 
-1. **Silent divergence from the Loop B cost module.** We now have two places
-   that compute "what did the agent cost" — `evals/harness/token_usage.py`
-   (Loop B) and `benchmarks/.../harvest_metrics.py` (Loop C). They must agree,
-   or we will publish two different cost figures for the same run. They cannot
-   share an import (the harvester has to run inside a minimal task container),
-   so consistency is pinned by TEST instead of by import path.
+1. **Silent divergence from the Cross-Model Skill Evaluation cost module.**
+   We now have two places that compute "what did the agent cost" —
+   `evals/harness/token_usage.py` (Cross-Model Skill Evaluations) and
+   `benchmarks/.../harvest_metrics.py` (MSBench Skill-Efficacy Benchmark).
+   They must agree, or we will publish two different cost figures for the same
+   run. They cannot share an import (the harvester has to run inside a minimal
+   task container), so consistency is pinned by TEST instead of by import path.
 
 2. **A zero that means "not measured".** If harvesting fails, a missing metric
    is honest; a silent 0 corrupts every average computed over it.
@@ -109,7 +110,7 @@ def _reward(tmp_path, value) -> Path:
 # ---------------------------------------------------------------------------
 # THE consistency guarantee
 # ---------------------------------------------------------------------------
-def test_harvester_agrees_with_the_loop_b_cost_module(store):
+def test_harvester_agrees_with_the_skill_evaluation_cost_module(store):
     """The two cost implementations must produce identical numbers.
 
     They deliberately do not share code — the harvester must be self-contained
@@ -120,7 +121,7 @@ def test_harvester_agrees_with_the_loop_b_cost_module(store):
 
     conn, tmp = tu._open_readonly(store)
     try:
-        loop_b = tu._derive(dict(conn.execute(
+        skill_evaluation = tu._derive(dict(conn.execute(
             tu._ROLLUP_SQL.replace("WHERE session_id = ?", "")
         ).fetchone()))
     finally:
@@ -136,9 +137,9 @@ def test_harvester_agrees_with_the_loop_b_cost_module(store):
         ("agent_turns", "turns"),
         ("agent_requests", "requests"),
     ]:
-        assert harvested[hkey] == pytest.approx(loop_b[tkey]), (
+        assert harvested[hkey] == pytest.approx(skill_evaluation[tkey]), (
             f"cost definitions have drifted: harvest_metrics.{hkey}="
-            f"{harvested[hkey]} but token_usage.{tkey}={loop_b[tkey]}"
+            f"{harvested[hkey]} but token_usage.{tkey}={skill_evaluation[tkey]}"
         )
 
 
@@ -295,7 +296,7 @@ def test_reader_does_not_mutate_the_session_store(store):
 
 
 # ---------------------------------------------------------------------------
-# report generator (Loop C effectiveness report)
+# report generator (MSBench Skill-Efficacy Benchmark effectiveness report)
 # ---------------------------------------------------------------------------
 import importlib.util as _ilu
 from pathlib import Path as _Path
