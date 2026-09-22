@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import io
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -19,6 +20,23 @@ def test_every_diagnostic_has_python_and_powershell_entry_points():
         assert (SCRIPTS / f"{name}.sh").is_file()
         assert (SCRIPTS / f"{name}.py").is_file()
         assert (SCRIPTS / f"{name}.ps1").is_file()
+
+
+@pytest.mark.skipif(os.name == "nt", reason="Windows does not expose Unix mode bits")
+def test_all_tracked_shell_files_are_executable():
+    result = subprocess.run(
+        ["git", "ls-files", "*.sh"],
+        cwd=REPO,
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    missing = []
+    for relative in result.stdout.splitlines():
+        path = REPO / relative
+        if path.stat().st_mode & 0o111 == 0:
+            missing.append(relative)
+    assert not missing, f"shell files missing executable mode: {missing}"
 
 
 def test_container_option_overrides_environment(monkeypatch):
