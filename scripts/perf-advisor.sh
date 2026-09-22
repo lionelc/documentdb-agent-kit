@@ -181,9 +181,17 @@ colls.forEach(function(c) {
     var indexedFields={}; db[c].getIndexes().forEach(function(ix){var k=Object.keys(ix.key||{}); if(k.length)indexedFields[k[0]]=true;});
     Object.keys(sample).filter(function(k){return k!=="_id";}).forEach(function(field){
         var val=sample[field];
-        if (typeof val==="string" && val.length<100) testQuery(c,field,"find {"+field+":\"...\"}", JSON.parse("{\""+field+"\":\""+val+"\"}"), indexedFields);
-        else if (typeof val==="number") testQuery(c,field,"find {"+field+":{$gt:...}}", JSON.parse("{\""+field+"\":{\"$gt\":"+(val/2)+"}}"), indexedFields);
-        else if (typeof val==="boolean") testQuery(c,field,"find {"+field+":"+val+"}", JSON.parse("{\""+field+"\":"+val+"}"), indexedFields);
+        var filter={};
+        if (typeof val==="string" && val.length<100) {
+            filter[field]=val;
+            testQuery(c,field,"find {"+field+":\"...\"}",filter,indexedFields);
+        } else if (typeof val==="number") {
+            filter[field]={$gt:val/2};
+            testQuery(c,field,"find {"+field+":{$gt:...}}",filter,indexedFields);
+        } else if (typeof val==="boolean") {
+            filter[field]=val;
+            testQuery(c,field,"find {"+field+":"+val+"}",filter,indexedFields);
+        }
     });
 });
 
@@ -215,7 +223,8 @@ colls.forEach(function(c){
     var sf=Object.keys(sample).filter(function(k){return k!=="_id";}).sort()
              .find(function(f){return typeof sample[f]==="string"&&sample[f].length<50;});
     if (sf){ var v=sample[sf];
-        timeQuery(c,"find({"+sf+":...})",function(){return db[c].find(JSON.parse("{\""+sf+"\":\""+v+"\"}")).count();});
+        var filter={}; filter[sf]=v;
+        timeQuery(c,"find({"+sf+":...})",function(){return db[c].find(filter).count();});
         timeQuery(c,"aggregate $group by "+sf,function(){return db[c].aggregate([{$group:{_id:"$"+sf,n:{$sum:1}}}]).toArray().length;});
     }
 });
@@ -447,12 +456,16 @@ colls.forEach(function(c) {
     // Test equality/range filter on each top-level string/number field
     fields.forEach(function(field) {
         var val = sample[field];
+        var filter = {};
         if (typeof val === "string" && val.length < 100) {
-            testQuery(c, field, "find {" + field + ":\"...\"}", JSON.parse("{\"" + field + "\":\"" + val + "\"}"), null, indexedFields);
+            filter[field] = val;
+            testQuery(c, field, "find {" + field + ":\"...\"}", filter, null, indexedFields);
         } else if (typeof val === "number") {
-            testQuery(c, field, "find {" + field + ":{$gt:...}}", JSON.parse("{\"" + field + "\":{\"$gt\":" + (val/2) + "}}"), null, indexedFields);
+            filter[field] = {$gt: val/2};
+            testQuery(c, field, "find {" + field + ":{$gt:...}}", filter, null, indexedFields);
         } else if (typeof val === "boolean") {
-            testQuery(c, field, "find {" + field + ":" + val + "}", JSON.parse("{\"" + field + "\":" + val + "}"), null, indexedFields);
+            filter[field] = val;
+            testQuery(c, field, "find {" + field + ":" + val + "}", filter, null, indexedFields);
         }
     });
     // NOTE: a full-collection $group aggregation always scans every document by
@@ -503,8 +516,9 @@ colls.forEach(function(c) {
     var strField = fields.find(function(f) { return typeof sample[f] === "string" && sample[f].length < 50; });
     if (strField) {
         var val = sample[strField];
+        var filter = {}; filter[strField] = val;
         timeQuery(c, "find({" + strField + ":\"" + val.substring(0,20) + "...\"})", function() {
-            return db[c].find(JSON.parse("{\"" + strField + "\":\"" + val + "\"}")).count();
+            return db[c].find(filter).count();
         });
     }
 
