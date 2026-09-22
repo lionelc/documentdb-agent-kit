@@ -28,12 +28,13 @@ def container_name(request):
     return request.config.getoption("--container") or kit.CONTAINER
 
 
-@pytest.fixture(scope="session", autouse=True)
+@pytest.fixture(scope="session")
 def require_container(container_name):
-    """Skip everything if the DocumentDB container isn't running or no password
-    is configured (credentials are never baked in — set DOCDB_PASSWORD or
-    DB_PASSWORD). If a password IS set but wrong, fail fast with a clear
-    message instead of ~30 cryptic seed failures."""
+    """Validate DocumentDB access for fixtures that explicitly depend on it.
+
+    Container-independent tests must not request this fixture. Credentials are
+    never baked in; set DOCDB_PASSWORD or DB_PASSWORD for live scenarios.
+    """
     if not kit.DB_PASSWORD:
         pytest.skip("No DB password configured — set DOCDB_PASSWORD or DB_PASSWORD "
                     "(e.g. export DB_PASSWORD='<your-password>')")
@@ -59,6 +60,7 @@ def require_container(container_name):
             "  Or recreate the container with a password you choose.",
             returncode=2,
         )
+    return container_name
 
 
 @pytest.fixture
