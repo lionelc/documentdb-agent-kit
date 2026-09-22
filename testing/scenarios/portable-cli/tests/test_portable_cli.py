@@ -8,6 +8,7 @@ from pathlib import Path
 import pytest
 
 SCRIPTS = Path(__file__).resolve().parents[4] / "scripts"
+REPO = SCRIPTS.parent
 sys.path.insert(0, str(SCRIPTS))
 
 import portable_diagnostic as portable  # noqa: E402
@@ -80,3 +81,49 @@ def test_crlf_shell_checkout_is_normalized(tmp_path):
     assert normalized.read_bytes() == (
         b"#!/usr/bin/env bash\nset -uo pipefail\necho ok\n"
     )
+
+
+def test_ci_and_benchmark_pin_the_same_mongosh_version():
+    workflow = (
+        REPO / ".github" / "workflows" / "diagnostic-regression.yml"
+    ).read_text()
+    dockerfile = (
+        REPO
+        / "benchmarks"
+        / "documentdb-sdk-skills"
+        / "shared"
+        / "base"
+        / "Dockerfile"
+    ).read_text()
+
+    assert 'MONGOSH_VERSION: "2.3.8"' in workflow
+    assert "ARG MONGOSH_VERSION=2.3.8" in dockerfile
+    digest = "23edb768189663aaa9732a2340a25b5fc05a314940538809a7840be7f2ce221f"
+    assert f'MONGOSH_SHA256: "{digest}"' in workflow
+    assert f"ARG MONGOSH_SHA256={digest}" in dockerfile
+    assert "sha256sum -c -" in workflow
+    assert "sha256sum -c -" in dockerfile
+    assert "INSTALLED_VERSION=" in workflow
+    assert 'Expected mongosh $MV' in workflow
+
+
+def test_ci_and_benchmark_pin_documentdb_image_digest():
+    workflow = (
+        REPO / ".github" / "workflows" / "diagnostic-regression.yml"
+    ).read_text()
+    dockerfile = (
+        REPO
+        / "benchmarks"
+        / "documentdb-sdk-skills"
+        / "shared"
+        / "base"
+        / "Dockerfile"
+    ).read_text()
+    image = (
+        "ghcr.io/microsoft/documentdb/documentdb-local"
+        "@sha256:0fcf634531c1917ad0855ff9f4354aca0a5c5d8e435f08250568deb37eeb0ad5"
+    )
+
+    assert f'DOCUMENTDB_LOCAL_IMAGE: "{image}"' in workflow
+    assert f"FROM {image}" in dockerfile
+    assert "documentdb-local:latest" not in workflow

@@ -19,6 +19,8 @@ permissions:
 
 env:
   MONGOSH_VERSION: "2.3.8"
+  MONGOSH_SHA256: "23edb768189663aaa9732a2340a25b5fc05a314940538809a7840be7f2ce221f"
+  DOCUMENTDB_LOCAL_IMAGE: "ghcr.io/microsoft/documentdb/documentdb-local@sha256:0fcf634531c1917ad0855ff9f4354aca0a5c5d8e435f08250568deb37eeb0ad5"
 
 jobs:
   # -------------------------------------------------------------------------
@@ -90,7 +92,7 @@ jobs:
           docker run -d --name documentdb-local \
             -p 10260:10260 -p 9712:9712 \
             -e USERNAME=docdbadmin -e PASSWORD="$DOCDB_PASSWORD" \
-            ghcr.io/microsoft/documentdb/documentdb-local:latest
+            "$DOCUMENTDB_LOCAL_IMAGE"
 
       - name: Install mongosh into the container
         # NOT optional. The documentdb-local image ships psql but NO mongosh
@@ -101,14 +103,21 @@ jobs:
         # dependency.
         run: |
           MV="${MONGOSH_VERSION}"
-          curl -sSL "https://downloads.mongodb.com/compass/mongosh-${MV}-linux-x64.tgz" \
+          curl -fsSL "https://downloads.mongodb.com/compass/mongosh-${MV}-linux-x64.tgz" \
             -o /tmp/mongosh.tgz
+          echo "${MONGOSH_SHA256}  /tmp/mongosh.tgz" | sha256sum -c -
           tar xzf /tmp/mongosh.tgz -C /tmp
           docker cp "/tmp/mongosh-${MV}-linux-x64/bin/mongosh" \
             documentdb-local:/usr/local/bin/mongosh
           docker cp "/tmp/mongosh-${MV}-linux-x64/bin/mongosh_crypt_v1.so" \
             documentdb-local:/usr/local/lib/ || true
-          docker exec documentdb-local mongosh --version
+          INSTALLED_VERSION="$(docker exec documentdb-local mongosh --version | tr -d '\r')"
+          if [ "$INSTALLED_VERSION" != "$MV" ]; then
+            echo "::error::Expected mongosh $MV, installed $INSTALLED_VERSION"
+            exit 1
+          fi
+          echo "Installed compatible mongosh $INSTALLED_VERSION"
+          rm -rf /tmp/mongosh.tgz "/tmp/mongosh-${MV}-linux-x64"
 
       - name: Wait for the gateway
         run: |

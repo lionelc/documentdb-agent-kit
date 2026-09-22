@@ -19,7 +19,10 @@
 # layer is PUBLIC — so anyone can reproduce this image even though the MSBench
 # harness itself is Microsoft-internal.
 
-FROM ghcr.io/microsoft/documentdb/documentdb-local:latest
+# Pinned from ghcr.io/microsoft/documentdb/documentdb-local:latest on
+# 2026-09-22. Update deliberately and rerun the benchmark controls when the
+# base changes; a mutable tag would silently change the published environment.
+FROM ghcr.io/microsoft/documentdb/documentdb-local@sha256:0fcf634531c1917ad0855ff9f4354aca0a5c5d8e435f08250568deb37eeb0ad5
 
 USER root
 WORKDIR /
@@ -31,6 +34,7 @@ ENTRYPOINT []
 CMD ["/bin/bash"]
 
 ARG MONGOSH_VERSION=2.3.8
+ARG MONGOSH_SHA256=23edb768189663aaa9732a2340a25b5fc05a314940538809a7840be7f2ce221f
 
 RUN set -eux; \
     apt-get update; \
@@ -51,15 +55,20 @@ RUN set -eux; \
 # tooling talk to the database through it. Without this the whole benchmark
 # fails with "executable file not found", which reads like a broken task
 # rather than a missing dependency.
+#
+# Download directly from MongoDB's official distribution endpoint. The binary
+# is not stored in this repository. Both version and archive digest are pinned
+# so a changed upstream file cannot silently alter the benchmark image.
 # ---------------------------------------------------------------------------
 RUN set -eux; \
-    curl -sSL "https://downloads.mongodb.com/compass/mongosh-${MONGOSH_VERSION}-linux-x64.tgz" \
+    curl -fsSL "https://downloads.mongodb.com/compass/mongosh-${MONGOSH_VERSION}-linux-x64.tgz" \
         -o /tmp/mongosh.tgz; \
+    echo "${MONGOSH_SHA256}  /tmp/mongosh.tgz" | sha256sum -c -; \
     tar xzf /tmp/mongosh.tgz -C /tmp; \
     cp "/tmp/mongosh-${MONGOSH_VERSION}-linux-x64/bin/mongosh" /usr/local/bin/mongosh; \
     cp "/tmp/mongosh-${MONGOSH_VERSION}-linux-x64/bin/mongosh_crypt_v1.so" /usr/local/lib/ || true; \
     rm -rf /tmp/mongosh.tgz "/tmp/mongosh-${MONGOSH_VERSION}-linux-x64"; \
-    mongosh --version
+    test "$(mongosh --version | tr -d '\r')" = "${MONGOSH_VERSION}"
 
 # ---------------------------------------------------------------------------
 # Verifier dependencies, installed from VENDORED WHEELS with no network.
