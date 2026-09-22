@@ -62,6 +62,7 @@ COST_METRICS = [
 ]
 
 CHECK_CATEGORIES = ["api", "behavior", "documentdb", "engine", "source", "skills"]
+TEXT_CHUNK_BYTES = 6
 
 
 def load(path: Path) -> dict:
@@ -97,6 +98,26 @@ def _metrics(report: dict, benchmark: str) -> dict:
     return cm[keys[0]] if len(keys) == 1 else {}
 
 
+def decode_text_metrics(values: dict, prefix: str) -> str | None:
+    """Reconstruct a string encoded as exact numeric custom metrics."""
+    if not values.get(f"{prefix}_available"):
+        return None
+    length = int(values.get(f"{prefix}_utf8_len", 0))
+    count = int(values.get(f"{prefix}_chunk_count", 0))
+    data = bytearray()
+    for index in range(count):
+        key = f"{prefix}_chunk_{index:03d}"
+        if key not in values:
+            return None
+        remaining = length - len(data)
+        width = min(TEXT_CHUNK_BYTES, remaining)
+        data.extend(int(values[key]).to_bytes(width, "big"))
+    try:
+        return bytes(data).decode("utf-8")
+    except UnicodeDecodeError:
+        return None
+
+
 def summarise(report: dict, benchmark: str) -> dict:
     """Reduce one arm to pass rate + mean cost, per instance and overall."""
     instances = _instances(report, benchmark)
@@ -110,6 +131,14 @@ def summarise(report: dict, benchmark: str) -> dict:
     collected: dict[str, list[float]] = {k: [] for k, _, _ in COST_METRICS}
     checks: dict[str, list[float]] = {}
     missing_tokens = 0
+    provenance = {
+        "model_ids": set(),
+        "api_endpoints": set(),
+        "reasoning_efforts": set(),
+        "agent_identity": set(),
+        "copilot_cli_version": set(),
+    }
+    missing_model_data = 0
 
     for inst in attempted:
         values = ((metrics.get(inst) or {}).get("values")) or {}
@@ -122,6 +151,12 @@ def summarise(report: dict, benchmark: str) -> dict:
             p, t = values.get(f"checks_{cat}_passed"), values.get(f"checks_{cat}_total")
             if p is not None and t:
                 checks.setdefault(cat, []).append(float(p) / float(t))
+        for prefix in provenance:
+            value = decode_text_metrics(values, prefix)
+            if value:
+                provenance[prefix].add(value)
+        if not decode_text_metrics(values, "model_ids"):
+            missing_model_data += 1
 
     return {
         "benchmark": benchmark,
@@ -132,8 +167,33 @@ def summarise(report: dict, benchmark: str) -> dict:
         "cost_n": {k: len(v) for k, v in collected.items()},
         "check_rates": {c: statistics.mean(v) for c, v in checks.items()},
         "missing_token_data": missing_tokens,
+        "missing_model_data": missing_model_data,
+        "provenance": {key: sorted(values) for key, values in provenance.items()},
         "pass_at_k": report.get("pass_at_k_status") or {},
     }
+
+
+def require_comparable_model_provenance(treatment: dict, control: dict) -> str:
+    """Fail publication unless both arms observed one identical model set."""
+    for arm in (treatment, control):
+        if arm["missing_model_data"]:
+            raise SystemExit(
+                f"{arm['benchmark']} is missing observed model provenance for "
+                f"{arm['missing_model_data']} instance(s)"
+            )
+        identities = arm["provenance"]["model_ids"]
+        if len(identities) != 1:
+            raise SystemExit(
+                f"{arm['benchmark']} used inconsistent model identities: {identities}"
+            )
+    treatment_model = treatment["provenance"]["model_ids"][0]
+    control_model = control["provenance"]["model_ids"][0]
+    if treatment_model != control_model:
+        raise SystemExit(
+            "treatment and control used different models: "
+            f"{treatment_model!r} vs {control_model!r}"
+        )
+    return treatment_model
 
 
 def _pct(x):
@@ -156,6 +216,27 @@ def render(t: dict, c: dict) -> str:
       "agent, container, verifier — is identical between the two arms, so any "
       "difference is attributable to the kit.")
     A("")
+    models = t.get("provenance", {}).get("model_ids") or []
+    if len(models) == 1:
+        shown_models = "`, `".join(models[0].splitlines())
+        A(
+            f"- **Observed model identifier(s):** `{shown_models}` "
+            "(from the Copilot session store)"
+        )
+    endpoints = t.get("provenance", {}).get("api_endpoints") or []
+    if len(endpoints) == 1:
+        shown_endpoints = "`, `".join(endpoints[0].splitlines())
+        A(f"- **Observed API endpoint(s):** `{shown_endpoints}`")
+    efforts = t.get("provenance", {}).get("reasoning_efforts") or []
+    if len(efforts) == 1:
+        shown_efforts = "`, `".join(efforts[0].splitlines())
+        A(f"- **Observed reasoning effort(s):** `{shown_efforts}`")
+    agent_ids = t.get("provenance", {}).get("agent_identity") or []
+    if len(agent_ids) == 1:
+        A(f"- **Agent:** `{agent_ids[0]}`")
+    cli_versions = t.get("provenance", {}).get("copilot_cli_version") or []
+    if len(cli_versions) == 1:
+        A(f"- **Observed Copilot CLI version:** `{cli_versions[0]}`")
     A(f"- **Treatment** (`{t['benchmark']}`): skills installed in the agent's "
       f"skills directory, and **never mentioned in the prompt** — this measures "
       f"whether an agent that merely *has* the kit applies it.")
@@ -242,6 +323,11 @@ def render(t: dict, c: dict) -> str:
                 f"`{arm['benchmark']}` has only {arm['instances']} instance(s); "
                 f"agent runs are non-deterministic, so treat this as indicative "
                 f"rather than a measurement.")
+        if arm["missing_model_data"]:
+            warnings.append(
+                f"{arm['missing_model_data']}/{arm['instances']} instances in "
+                f"`{arm['benchmark']}` had no observed model provenance."
+            )
     if warnings:
         A("## Caveats")
         A("")
@@ -273,6 +359,7 @@ def main(argv=None) -> int:
 
     t = summarise(load(args.treatment), args.treatment_benchmark)
     c = summarise(load(args.control), args.control_benchmark)
+    require_comparable_model_provenance(t, c)
 
     if args.json:
         out = json.dumps({"treatment": t, "control": c}, indent=2, default=str)

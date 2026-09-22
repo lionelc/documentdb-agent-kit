@@ -162,6 +162,9 @@ jobs:
             echo "installed, never mentioned) and \`documentdb-sdk-skills-noskills\`"
             echo "(control). An absolute pass@k on either arm alone is not a result."
             echo
-            echo "Per-instance token cost is in \`custom_metrics.json\`; export it with"
+            echo "Per-instance token cost and observed model provenance are in"
+            echo "\`custom_metrics.json\`; export them with"
             echo '`msbench-cli report --run_id <id> --output report.json`.'
+            echo "The report generator refuses comparisons with missing or different"
+            echo "model identifiers between treatment and control."
           } >> "$GITHUB_STEP_SUMMARY"

@@ -80,6 +80,21 @@ An agent can fake the source. It cannot fake the engine's own statistics.
 Our `check_source.py` is ~130 lines, not 520, because almost everything moved
 to a stronger rung.
 
+### Model provenance
+
+The current MSBench command surface used here does not configure a model in the
+benchmark invocation. To prevent an undocumented platform model change from
+looking like a skill regression or improvement, each instance reads the actual
+model identifier from the Copilot CLI session store. The verifier losslessly
+encodes the model set, API endpoint, reasoning effort, agent identity, and
+observable Copilot CLI version into numeric `custom_metrics.json` fields.
+
+`report.py` refuses to publish a treatment/control comparison if any instance
+lacks model provenance, if instances within an arm used inconsistent model
+sets, or if the two arms used different model identifiers. If MSBench adds a
+supported explicit model option, the workflow should pin it as well as retaining
+the observed-value check.
+
 ### The metric: scan amplification
 
 `totalDocsExamined / nReturned`.

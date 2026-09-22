@@ -36,6 +36,10 @@ cache share, so a reader cannot accidentally quote the misleading number.
 
 All emitted values are NUMERIC. MSBench infers a `numeric` schema from the
 values, and a string would produce an inconsistent schema across instances.
+Model identifiers, API endpoints, reasoning effort, agent identity, and the
+observable Copilot CLI version are encoded losslessly into six-byte integer
+chunks. `report.py` reconstructs them and refuses to publish a treatment/control
+comparison when model provenance is missing or differs.
 
 This is intentionally self-contained (stdlib only, no imports from the kit):
 it has to run inside a minimal task container. `testing/scenarios/benchmark-metrics/`
@@ -49,11 +53,14 @@ import json
 import os
 import shutil
 import sqlite3
+import subprocess
 import sys
 import tempfile
 from pathlib import Path
 
 NANO_AIU_PER_CREDIT = 1_000_000_000
+TEXT_CHUNK_BYTES = 6
+AGENT_IDENTITY = "msbench-agent-github-copilot-cli"
 
 # Where the Copilot CLI keeps its session store. The agent may run as root or
 # as another user depending on how the runner invokes it, so try each.
@@ -77,6 +84,59 @@ SELECT
     COALESCE(SUM(duration_ms), 0)        AS duration_ms
 FROM assistant_usage_events
 """
+
+
+def encode_text_metrics(prefix: str, value: str) -> dict[str, int]:
+    """Encode UTF-8 losslessly as JSON-safe integers.
+
+    MSBench custom metrics are numeric-only. Six bytes fit below 2^48, so every
+    chunk remains exactly representable by both JSON numbers and IEEE-754
+    doubles while still allowing the report to reconstruct the exact string.
+    """
+    data = value.encode("utf-8")
+    metrics = {
+        f"{prefix}_available": 1 if data else 0,
+        f"{prefix}_utf8_len": len(data),
+        f"{prefix}_chunk_count": (len(data) + TEXT_CHUNK_BYTES - 1)
+        // TEXT_CHUNK_BYTES,
+    }
+    for index in range(0, len(data), TEXT_CHUNK_BYTES):
+        chunk = data[index : index + TEXT_CHUNK_BYTES]
+        metrics[f"{prefix}_chunk_{index // TEXT_CHUNK_BYTES:03d}"] = int.from_bytes(
+            chunk, "big"
+        )
+    return metrics
+
+
+def observed_values(conn: sqlite3.Connection, column: str) -> list[str]:
+    allowed = {"model", "api_endpoint", "reasoning_effort"}
+    if column not in allowed:
+        raise ValueError(f"unsupported provenance column: {column}")
+    try:
+        rows = conn.execute(
+            f"SELECT DISTINCT {column} FROM assistant_usage_events "
+            f"WHERE {column} IS NOT NULL AND {column} <> '' ORDER BY {column}"
+        )
+    except sqlite3.OperationalError:
+        return []
+    return [str(row[0]) for row in rows]
+
+
+def copilot_cli_version() -> str:
+    executable = shutil.which("copilot")
+    if not executable:
+        return ""
+    try:
+        result = subprocess.run(
+            [executable, "--version"],
+            capture_output=True,
+            text=True,
+            timeout=10,
+            check=False,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return ""
+    return (result.stdout or result.stderr).strip().splitlines()[0]
 
 
 def find_store(explicit: str | None = None) -> Path | None:
@@ -117,6 +177,9 @@ def read_usage(db_path: Path) -> dict:
             if "assistant_usage_events" not in tables:
                 return {}
             row = dict(conn.execute(ROLLUP_SQL).fetchone() or {})
+            model_ids = observed_values(conn, "model")
+            api_endpoints = observed_values(conn, "api_endpoint")
+            reasoning_efforts = observed_values(conn, "reasoning_effort")
         finally:
             conn.close()
     finally:
@@ -128,7 +191,7 @@ def read_usage(db_path: Path) -> dict:
     inp = int(row["input_tokens"])
     cache = int(row["cache_read_tokens"])
     fresh = max(inp - cache, 0)
-    return {
+    metrics = {
         "agent_requests": int(row["requests"]),
         "agent_turns": int(row["turns"]),
         "tokens_input": inp,
@@ -142,7 +205,18 @@ def read_usage(db_path: Path) -> dict:
         "cache_read_share_pct": round(100.0 * cache / inp, 2) if inp else 0.0,
         "ai_credits": round(int(row["nano_aiu"]) / NANO_AIU_PER_CREDIT, 4),
         "agent_wall_secs": round(int(row["duration_ms"]) / 1000.0, 1),
+        "model_count": len(model_ids),
+        "api_endpoint_count": len(api_endpoints),
+        "reasoning_effort_count": len(reasoning_efforts),
     }
+    metrics.update(encode_text_metrics("model_ids", "\n".join(model_ids)))
+    metrics.update(encode_text_metrics("api_endpoints", "\n".join(api_endpoints)))
+    metrics.update(
+        encode_text_metrics("reasoning_efforts", "\n".join(reasoning_efforts))
+    )
+    metrics.update(encode_text_metrics("agent_identity", AGENT_IDENTITY))
+    metrics.update(encode_text_metrics("copilot_cli_version", copilot_cli_version()))
+    return metrics
 
 
 def read_ctrf(path: Path) -> dict:

@@ -160,6 +160,36 @@ def test_turns_counts_distinct_turns_not_requests(store):
     assert m["agent_turns"] == 2
 
 
+def test_model_identity_is_captured_as_numeric_metrics(store):
+    metrics = hm.read_usage(store)
+    assert metrics["model_count"] == 1
+    encoded = {
+        key: value for key, value in metrics.items() if key.startswith("model_ids_")
+    }
+    assert encoded["model_ids_available"] == 1
+    assert all(
+        isinstance(value, (int, float)) and not isinstance(value, bool)
+        for value in encoded.values()
+    )
+    assert all(
+        value < 2**53
+        for key, value in encoded.items()
+        if "_chunk_" in key
+    )
+
+
+def test_multiple_models_are_recorded_not_silently_merged(tmp_path):
+    mixed = _make_store(
+        tmp_path,
+        [
+            _row(turn_index=0, model="model-a"),
+            _row(turn_index=1, model="model-b"),
+        ],
+    )
+    metrics = hm.read_usage(mixed)
+    assert metrics["model_count"] == 2
+
+
 # ---------------------------------------------------------------------------
 # missing data must not read as zero cost
 # ---------------------------------------------------------------------------
@@ -324,6 +354,10 @@ def _msbench_report(benchmark, resolved, values_by_instance):
     }
 
 
+def _model_values(model="m1"):
+    return hm.encode_text_metrics("model_ids", model)
+
+
 def test_report_counts_only_true_as_a_pass():
     """`resolved` values may be bool OR the string "error". Counting "error" as
     anything but a failure would silently inflate the published pass rate."""
@@ -364,6 +398,76 @@ def test_report_requires_both_arms():
         m.main(["--treatment", str(_REPORT_PY)])  # no --control
 
 
+def test_report_decodes_the_exact_observed_model():
+    m = _report_mod()
+    values = _model_values("claude-opus-5")
+    assert m.decode_text_metrics(values, "model_ids") == "claude-opus-5"
+
+
+def test_report_rejects_missing_model_provenance():
+    m = _report_mod()
+    treatment = m.summarise(
+        _msbench_report(
+            "documentdb-sdk-skills",
+            {"a": True},
+            {"a": {"tokens_available": 1}},
+        ),
+        "documentdb-sdk-skills",
+    )
+    control_values = {"tokens_available": 1, **_model_values("m1")}
+    control = m.summarise(
+        _msbench_report(
+            "documentdb-sdk-skills-noskills",
+            {"a": True},
+            {"a": control_values},
+        ),
+        "documentdb-sdk-skills-noskills",
+    )
+    with pytest.raises(SystemExit, match="missing observed model provenance"):
+        m.require_comparable_model_provenance(treatment, control)
+
+
+def test_report_rejects_different_models_between_arms():
+    m = _report_mod()
+    treatment = m.summarise(
+        _msbench_report(
+            "documentdb-sdk-skills",
+            {"a": True},
+            {"a": {"tokens_available": 1, **_model_values("model-a")}},
+        ),
+        "documentdb-sdk-skills",
+    )
+    control = m.summarise(
+        _msbench_report(
+            "documentdb-sdk-skills-noskills",
+            {"a": True},
+            {"a": {"tokens_available": 1, **_model_values("model-b")}},
+        ),
+        "documentdb-sdk-skills-noskills",
+    )
+    with pytest.raises(SystemExit, match="different models"):
+        m.require_comparable_model_provenance(treatment, control)
+
+
+def test_report_accepts_the_same_observed_model():
+    m = _report_mod()
+    values = {"tokens_available": 1, **_model_values("gpt-5.6-sol")}
+    treatment = m.summarise(
+        _msbench_report("documentdb-sdk-skills", {"a": True}, {"a": values}),
+        "documentdb-sdk-skills",
+    )
+    control = m.summarise(
+        _msbench_report(
+            "documentdb-sdk-skills-noskills", {"a": True}, {"a": values}
+        ),
+        "documentdb-sdk-skills-noskills",
+    )
+    assert (
+        m.require_comparable_model_provenance(treatment, control)
+        == "gpt-5.6-sol"
+    )
+
+
 def test_credits_per_passing_result_charges_failures_to_successes(tmp_path):
     """5 runs at 100 credits with 1 pass costs 500 per success, not 100."""
     m = _report_mod()
@@ -387,16 +491,19 @@ def test_report_renders_the_headline_and_category_tables():
     t = m.summarise(_msbench_report(
         "documentdb-sdk-skills", {"a": True},
         {"a": {"tokens_available": 1, "ai_credits": 5.0,
+               **_model_values("m1"),
                "checks_engine_passed": 4, "checks_engine_total": 4}}),
         "documentdb-sdk-skills")
     c = m.summarise(_msbench_report(
         "documentdb-sdk-skills-noskills", {"a": False},
         {"a": {"tokens_available": 1, "ai_credits": 4.0,
+               **_model_values("m1"),
                "checks_engine_passed": 0, "checks_engine_total": 4}}),
         "documentdb-sdk-skills-noskills")
     out = m.render(t, c)
     assert "Pass rate" in out
     assert "`engine`" in out
     assert "Credits per passing result" in out
+    assert "Observed model identifier" in out
     # the reader must be steered away from raw input tokens
     assert "fresh" in out.lower()

@@ -578,6 +578,7 @@ so a single lucky or unlucky attempt does not become the headline.
 | per-check results | `pytest --ctrf` → `/logs/verifier/ctrf.json` | `harvest_metrics.py` |
 | `checks_<category>_*` | `harvest_metrics.py: read_ctrf()` | `report.py` |
 | token counts, `ai_credits` | `harvest_metrics.py: read_usage()`, from the Copilot CLI session store | `report.py` |
+| observed model, endpoint, reasoning effort, agent and CLI version | `harvest_metrics.py`, losslessly encoded as numeric custom metrics | `report.py`, which rejects missing/mismatched model provenance |
 | `custom_metrics.json` | `harvest_metrics.py: main()` → `$OUTPUT_DIR` | `msbench-cli report` |
 | `resolved`, `pass_at_k_status` | MSBench | `report.py: summarise()` |
 | the tables above | `report.py: render()` | you |
