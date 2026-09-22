@@ -17,3 +17,15 @@ docdb_exec_as() {
         docker exec "$CONTAINER_NAME" "$@"
     fi
 }
+
+docdb_exec_stdin_as() {
+    local user="$1"
+    shift
+    if [[ "${DOCDB_DIRECT:-0}" == "1" ]]; then
+        "$@"
+    elif [[ -n "$user" ]]; then
+        docker exec -i -u "$user" "$CONTAINER_NAME" "$@"
+    else
+        docker exec -i "$CONTAINER_NAME" "$@"
+    fi
+}

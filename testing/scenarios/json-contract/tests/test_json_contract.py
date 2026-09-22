@@ -18,6 +18,9 @@ _SPEC = yaml.safe_load(
 )
 SHAPE = _SPEC["shape"]
 TYPEMAP = {"list": list, "object": dict}
+ADVERSARIAL_COLLECTION = (
+    "safe;db.getCollection('diagnostic_sentinel').drop();db.safe"
+)
 
 
 @pytest.fixture(scope="session")
@@ -28,6 +31,17 @@ def json_outputs(seeded_db):
         out[script] = kit.run_script(script, "--db", seeded_db, "--json",
                                      want_json=True)
     return out
+
+
+@pytest.fixture(scope="session")
+def quoted_database(request, require_container):
+    name = "test_json_'contract"
+    fixture = Path(__file__).resolve().parents[1] / "fixture.js"
+    kit.drop_db(name, container=require_container)
+    kit.seed(name, fixture, container=require_container)
+    yield name
+    if not request.config.getoption("--keep-db"):
+        kit.drop_db(name, container=require_container)
 
 
 @pytest.mark.jsoncontract
@@ -85,6 +99,57 @@ def test_bash_and_portable_entry_points_have_same_json_shape(
     assert type(bash.json) is type(portable.json)
     if isinstance(portable.json, dict):
         assert set(bash.json) == set(portable.json)
+
+
+@pytest.mark.jsoncontract
+@pytest.mark.parametrize(
+    ("script", "extra_args"),
+    [
+        ("document-bloat-advisor.sh", []),
+        (
+            "toast-split-advisor.sh",
+            ["--collection", ADVERSARIAL_COLLECTION, "--sample", "5"],
+        ),
+    ],
+)
+def test_catalog_names_are_passed_as_data(quoted_database, script, extra_args):
+    result = kit.run_script(
+        script,
+        "--db",
+        quoted_database,
+        "--min-total-kb",
+        "0",
+        "--toast-ratio",
+        "0",
+        *extra_args,
+        "--json",
+        want_json=True,
+        portable=False,
+    )
+    assert result.returncode == 0, (
+        f"{script} failed for a quoted collection name:\n{result.stderr[:400]}"
+    )
+    assert result.json is not None, result.stdout[:400]
+    findings = (
+        result.json
+        if script == "document-bloat-advisor.sh"
+        else result.json["findings"]
+    )
+    quoted = [
+        finding for finding in findings
+        if finding["collection"] == ADVERSARIAL_COLLECTION
+    ]
+    assert quoted, f"{script} did not preserve the exact collection name"
+    assert quoted[0]["avg_obj_size"] > 0, (
+        f"{script} did not sample the quoted collection"
+    )
+    sentinel = kit.mongosh_eval(
+        quoted_database,
+        'db.getCollection("diagnostic_sentinel").countDocuments({})',
+    )
+    assert "1" in sentinel.split(), (
+        f"{script} executed JavaScript embedded in the collection name"
+    )
 
 
 @pytest.mark.jsoncontract

@@ -69,21 +69,30 @@ while [[ $# -gt 0 ]]; do
 done
 [[ -z "$DB" ]] && { echo "Error: --db <name> is required" >&2; exit 1; }
 [[ -z "$PASSWORD" ]] && { echo "Error: no password. Set DB_PASSWORD or pass --password (local demo: export DB_PASSWORD=Test1234)." >&2; exit 1; }
+[[ "$SAMPLE" =~ ^[1-9][0-9]*$ ]] || { echo "Error: --sample must be a positive integer" >&2; exit 2; }
+[[ "$MIN_TOTAL_KB" =~ ^[0-9]+$ ]] || { echo "Error: --min-total-kb must be a non-negative integer" >&2; exit 2; }
+[[ "$FIELD_MIN_BYTES" =~ ^[0-9]+$ ]] || { echo "Error: --field-min-bytes must be a non-negative integer" >&2; exit 2; }
+[[ "$TOAST_RATIO" =~ ^[0-9]+([.][0-9]+)?$ ]] || { echo "Error: --toast-ratio must be a non-negative number" >&2; exit 2; }
 
 run_mongosh() {
-    docdb_exec_as "" mongosh "localhost:${PORT}/${DB}" \
+    local program="$1"
+    shift
+    docdb_exec_as "" env "$@" mongosh "localhost:${PORT}/${DB}" \
         -u "$DB_USER_" -p "$PASSWORD" --authenticationMechanism SCRAM-SHA-256 \
-        --tls --tlsAllowInvalidCertificates --quiet --eval "$1" 2>/dev/null
+        --tls --tlsAllowInvalidCertificates --quiet --eval "$program" 2>/dev/null
 }
 run_psql() {
-    docdb_exec_as "" psql -h localhost -p "$PG_PORT" -U "$PG_USER" -d "$PG_DB" \
-        -t --no-align -F $'\t' -c "$1" 2>/dev/null | grep -vE '^(SET|)$'
+    local query="$1"
+    shift
+    printf '%s\n' "$query" |
+        docdb_exec_stdin_as "" psql -h localhost -p "$PG_PORT" -U "$PG_USER" \
+            -d "$PG_DB" -v ON_ERROR_STOP=1 -t --no-align -F $'\t' "$@" \
+            2>/dev/null |
+        grep -vE '^(SET|)$'
 }
 
 # ── Per-collection heap/TOAST from PostgreSQL (measured facts) ──────────────
 # tab-separated: collection<TAB>heap_bytes<TAB>toast_bytes<TAB>total_bytes
-COLL_FILTER=""
-[[ -n "$ONE_COLL" ]] && COLL_FILTER="AND c.collection_name = '${ONE_COLL}'"
 SIZES=$(run_psql "
 SELECT c.collection_name,
        pg_relation_size(t.oid),
@@ -91,9 +100,11 @@ SELECT c.collection_name,
        pg_total_relation_size(t.oid)
 FROM documentdb_api_catalog.collections c
 JOIN pg_class t ON t.oid = ('documentdb_data.documents_' || c.collection_id)::regclass
-WHERE c.database_name = '${DB}' ${COLL_FILTER}
+WHERE c.database_name = :'db_name'
+  AND (NULLIF(:'collection_name', '') IS NULL
+       OR c.collection_name = :'collection_name')
 ORDER BY pg_total_relation_size(t.oid) DESC;
-")
+" --set=db_name="$DB" --set=collection_name="$ONE_COLL")
 
 if [[ -z "$SIZES" ]]; then
     echo "No collections found for database '${DB}' (is it seeded? is the container up?)" >&2
@@ -107,9 +118,15 @@ fi
 field_json() {
     local coll="$1"
     run_mongosh '
-        var s = db.'"$coll"'.stats();
+        var coll = process.env.DOCDB_COLLECTION;
+        var sample = Number(process.env.DOCDB_SAMPLE);
+        if (!Number.isSafeInteger(sample) || sample < 1) {
+            throw new Error("invalid sample size");
+        }
+        var collection = db.getCollection(coll);
+        var s = collection.stats();
         var avg = s.avgObjSize || 0;
-        var docs = db.'"$coll"'.aggregate([{$sample:{size:'"$SAMPLE"'}}]).toArray();
+        var docs = collection.aggregate([{$sample:{size:sample}}]).toArray();
         var acc = {}, n = docs.length || 1;
         docs.forEach(function(doc){
             Object.keys(doc).forEach(function(k){
@@ -121,7 +138,8 @@ field_json() {
         var fields = Object.keys(acc).map(function(k){ return {f:k, b:Math.round(acc[k]/n)}; });
         fields.sort(function(a,b){ return b.b - a.b; });
         print("FIELDJSON " + JSON.stringify({avg_obj_size: avg, sampled: n, fields: fields}));
-    ' | sed -n 's/^FIELDJSON //p'
+    ' "DOCDB_COLLECTION=$coll" "DOCDB_SAMPLE=$SAMPLE" |
+        sed -n 's/^FIELDJSON //p'
 }
 
 # ── Collect one record per collection into a buffer for a single Python pass ─
@@ -136,8 +154,10 @@ while IFS=$'\t' read -r coll heap toast total; do
     ratio=$(awk -v t="$toast" -v h="$heap" 'BEGIN{ d=t+h; if(d<=0){print 0}else{printf "%.4f", t/d} }')
     over=$(awk -v r="$ratio" -v thr="$TOAST_RATIO" 'BEGIN{ print (r>thr)?1:0 }')
     if [[ "$over" == "1" ]]; then
-        fj=$(field_json "$coll")
-        [[ -z "$fj" ]] && fj='{"avg_obj_size":0,"sampled":0,"fields":[]}'
+        if ! fj=$(field_json "$coll") || [[ -z "$fj" ]]; then
+            echo "Failed to sample collection '$coll'" >&2
+            exit 1
+        fi
         BUFFER+="${coll}"$'\t'"${heap}"$'\t'"${toast}"$'\t'"${total}"$'\t'"${fj}"$'\n'
     else
         BUFFER+="${coll}"$'\t'"${heap}"$'\t'"${toast}"$'\t'"${total}"$'\t'"CLEAN"$'\n'
