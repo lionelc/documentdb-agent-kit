@@ -542,20 +542,26 @@ def test_build_entrypoint_stages_every_generated_docker_input():
     assert 'cp -r .wheels tasks/orders-api-python/.wheels' in build
 
 
-def test_build_entrypoint_pins_the_x86_64_benchmark_platform():
-    """The vendored wheels and pinned mongosh archive are x86-64.
-
-    Without an explicit platform Docker selects an arm64 base image on Apple
-    Silicon, then fails when the Dockerfile executes the x64 mongosh binary.
-    Both images must use the same amd64 platform so local reproduction matches
-    the MSBench environment.
-    """
+def test_build_entrypoint_uses_native_supported_architecture():
+    """Build inputs and control runs must use one consistent native platform."""
     build = (BENCH / "build.sh").read_text()
+    dockerfile = (BENCH / "shared" / "base" / "Dockerfile").read_text()
+    vendor = (BENCH / "shared" / "base" / "vendor-wheels.sh").read_text()
     verify = (BENCH / "verify-controls.sh").read_text()
 
-    assert 'BENCHMARK_PLATFORM="linux/amd64"' in build
+    assert "docker version --format '{{.Server.Arch}}'" in build
+    assert 'amd64|x86_64) BENCHMARK_ARCH="amd64"' in build
+    assert 'arm64|aarch64) BENCHMARK_ARCH="arm64"' in build
+    assert 'BENCHMARK_PLATFORM="linux/$BENCHMARK_ARCH"' in build
     assert build.count('--platform "$BENCHMARK_PLATFORM"') == 2
-    assert 'BENCHMARK_PLATFORM="linux/amd64"' in verify
+    assert 'VENDOR_ARCH="$BENCHMARK_ARCH"' in build
+    assert 'PIP_PLATFORM="manylinux2014_x86_64"' in vendor
+    assert 'PIP_PLATFORM="manylinux2014_aarch64"' in vendor
+    assert "repo.mongodb.org/apt/debian" in dockerfile
+    assert "arch=amd64,arm64" in dockerfile
+    assert '"mongodb-mongosh=${MONGOSH_VERSION}"' in dockerfile
+    assert "COPY --from=mongosh /usr/bin/mongosh" in dockerfile
+    assert "docker image inspect" in verify
     assert 'docker run --rm --platform "$BENCHMARK_PLATFORM"' in verify
 
 

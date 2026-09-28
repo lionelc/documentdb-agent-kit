@@ -22,7 +22,29 @@
 # Pinned from ghcr.io/microsoft/documentdb/documentdb-local:latest on
 # 2026-09-22. Update deliberately and rerun the benchmark controls when the
 # base changes; a mutable tag would silently change the published environment.
-FROM ghcr.io/microsoft/documentdb/documentdb-local@sha256:0fcf634531c1917ad0855ff9f4354aca0a5c5d8e435f08250568deb37eeb0ad5
+ARG DOCUMENTDB_BASE=ghcr.io/microsoft/documentdb/documentdb-local@sha256:0fcf634531c1917ad0855ff9f4354aca0a5c5d8e435f08250568deb37eeb0ad5
+
+# Install mongosh exactly as the DocumentDB Local source image does: from
+# MongoDB's official multi-architecture APT repository. Keep it in a throwaway
+# stage so package-manager metadata and build dependencies do not enter the
+# benchmark image.
+FROM ${DOCUMENTDB_BASE} AS mongosh
+USER root
+ARG MONGOSH_VERSION=2.3.8
+RUN set -eux; \
+    apt-get update; \
+    apt-get install -y --no-install-recommends wget ca-certificates gnupg binutils; \
+    wget -qO- https://www.mongodb.org/static/pgp/server-8.0.asc \
+        > /etc/apt/trusted.gpg.d/server-8.0.asc; \
+    echo "deb [ arch=amd64,arm64 ] https://repo.mongodb.org/apt/debian bookworm/mongodb-org/8.0 main" \
+        > /etc/apt/sources.list.d/mongodb-org-8.0.list; \
+    apt-get update; \
+    apt-get install -y --no-install-recommends "mongodb-mongosh=${MONGOSH_VERSION}"; \
+    strip --strip-debug /usr/bin/mongosh; \
+    test "$(mongosh --version | tr -d '\r')" = "${MONGOSH_VERSION}"; \
+    rm -rf /var/lib/apt/lists/*
+
+FROM ${DOCUMENTDB_BASE}
 
 USER root
 WORKDIR /
@@ -34,7 +56,6 @@ ENTRYPOINT []
 CMD ["/bin/bash"]
 
 ARG MONGOSH_VERSION=2.3.8
-ARG MONGOSH_SHA256=23edb768189663aaa9732a2340a25b5fc05a314940538809a7840be7f2ce221f
 
 RUN set -eux; \
     apt-get update; \
@@ -56,18 +77,11 @@ RUN set -eux; \
 # fails with "executable file not found", which reads like a broken task
 # rather than a missing dependency.
 #
-# Download directly from MongoDB's official distribution endpoint. The binary
-# is not stored in this repository. Both version and archive digest are pinned
-# so a changed upstream file cannot silently alter the benchmark image.
+# The package repository publishes native amd64 and arm64 builds. Only the
+# stripped executable is copied from the throwaway stage.
 # ---------------------------------------------------------------------------
+COPY --from=mongosh /usr/bin/mongosh /usr/local/bin/mongosh
 RUN set -eux; \
-    curl -fsSL "https://downloads.mongodb.com/compass/mongosh-${MONGOSH_VERSION}-linux-x64.tgz" \
-        -o /tmp/mongosh.tgz; \
-    echo "${MONGOSH_SHA256}  /tmp/mongosh.tgz" | sha256sum -c -; \
-    tar xzf /tmp/mongosh.tgz -C /tmp; \
-    cp "/tmp/mongosh-${MONGOSH_VERSION}-linux-x64/bin/mongosh" /usr/local/bin/mongosh; \
-    cp "/tmp/mongosh-${MONGOSH_VERSION}-linux-x64/bin/mongosh_crypt_v1.so" /usr/local/lib/ || true; \
-    rm -rf /tmp/mongosh.tgz "/tmp/mongosh-${MONGOSH_VERSION}-linux-x64"; \
     test "$(mongosh --version | tr -d '\r')" = "${MONGOSH_VERSION}"
 
 # ---------------------------------------------------------------------------

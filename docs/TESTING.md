@@ -257,9 +257,10 @@ bash build.sh
 bash verify-controls.sh
 ```
 
-The build and verification entrypoints pin containers to `linux/amd64`. The
-benchmark's vendored wheels and checksum-verified `mongosh` archive are x86-64,
-so Docker Desktop uses amd64 emulation on Apple Silicon.
+The build entrypoint detects the Docker daemon architecture and builds native
+`linux/amd64` or `linux/arm64` images with matching Python wheels and the
+pinned native `mongodb-mongosh` package from MongoDB's official APT repository.
+Verification reads the built image's architecture and uses the same platform.
 
 Both controls matter. A grader that cannot be satisfied makes every score
 meaningless; a grader that never fails is worthless.

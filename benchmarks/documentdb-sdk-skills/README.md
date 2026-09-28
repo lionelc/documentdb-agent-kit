@@ -215,9 +215,11 @@ bash build.sh
 bash verify-controls.sh
 ```
 
-The build and verification entrypoints pin containers to `linux/amd64` because
-the benchmark's vendored Python wheels and checksum-verified `mongosh` archive
-are x86-64. Docker Desktop uses amd64 emulation automatically on Apple Silicon.
+The build entrypoint detects the Docker daemon architecture and builds native
+`linux/amd64` or `linux/arm64` images. It vendors matching Python wheels and
+installs the pinned native `mongodb-mongosh` package from MongoDB's official
+APT repository; verification reads the built image's architecture and runs the
+controls on the same platform.
 
 `--backend local` lets MSBench run harbor-native benchmarks entirely on your
 machine, so the whole benchmark can be iterated **without** pushing to the
