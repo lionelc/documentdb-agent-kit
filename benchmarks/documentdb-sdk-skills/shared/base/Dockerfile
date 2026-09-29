@@ -19,32 +19,11 @@
 # layer is PUBLIC — so anyone can reproduce this image even though the MSBench
 # harness itself is Microsoft-internal.
 
-# Pinned from ghcr.io/microsoft/documentdb/documentdb-local:latest on
-# 2026-09-22. Update deliberately and rerun the benchmark controls when the
-# base changes; a mutable tag would silently change the published environment.
-ARG DOCUMENTDB_BASE=ghcr.io/microsoft/documentdb/documentdb-local@sha256:0fcf634531c1917ad0855ff9f4354aca0a5c5d8e435f08250568deb37eeb0ad5
-
-# Install mongosh exactly as the DocumentDB Local source image does: from
-# MongoDB's official multi-architecture APT repository. Keep it in a throwaway
-# stage so package-manager metadata and build dependencies do not enter the
-# benchmark image.
-FROM ${DOCUMENTDB_BASE} AS mongosh
-USER root
-ARG MONGOSH_VERSION=2.3.8
-RUN set -eux; \
-    apt-get update; \
-    apt-get install -y --no-install-recommends wget ca-certificates gnupg binutils; \
-    wget -qO- https://www.mongodb.org/static/pgp/server-8.0.asc \
-        > /etc/apt/trusted.gpg.d/server-8.0.asc; \
-    echo "deb [ arch=amd64,arm64 ] https://repo.mongodb.org/apt/debian bookworm/mongodb-org/8.0 main" \
-        > /etc/apt/sources.list.d/mongodb-org-8.0.list; \
-    apt-get update; \
-    apt-get install -y --no-install-recommends "mongodb-mongosh=${MONGOSH_VERSION}"; \
-    strip --strip-debug /usr/bin/mongosh; \
-    test "$(mongosh --version | tr -d '\r')" = "${MONGOSH_VERSION}"; \
-    rm -rf /var/lib/apt/lists/*
-
-FROM ${DOCUMENTDB_BASE}
+# Pinned from ghcr.io/documentdb/documentdb/documentdb-local:latest on
+# 2026-09-28. This official multi-architecture image includes mongosh. Update
+# deliberately and rerun the benchmark controls when the base changes; a
+# mutable tag would silently change the published environment.
+FROM ghcr.io/documentdb/documentdb/documentdb-local@sha256:a22772de11861a97d395eecdbe6fbaedd245498b015e748ca409f526430ca781
 
 USER root
 WORKDIR /
@@ -55,7 +34,10 @@ WORKDIR /
 ENTRYPOINT []
 CMD ["/bin/bash"]
 
-ARG MONGOSH_VERSION=2.3.8
+# The pinned Debian base enforces PEP 668. This is an isolated benchmark image,
+# and the task contract expects agent-authored build.sh scripts to use pip3
+# directly, so explicitly allow system installs inside this disposable image.
+ENV PIP_BREAK_SYSTEM_PACKAGES=1
 
 RUN set -eux; \
     apt-get update; \
@@ -69,20 +51,13 @@ RUN set -eux; \
 # present at /usr/bin/which.
 
 # ---------------------------------------------------------------------------
-# mongosh. NOT OPTIONAL, and not present upstream.
+# mongosh. NOT OPTIONAL, and provided by the pinned official base image.
 #
-# The documentdb-local image ships `psql` but NO `mongosh` (verified against
-# the pristine image). Every seeder, the verifier and the reference app's
-# tooling talk to the database through it. Without this the whole benchmark
-# fails with "executable file not found", which reads like a broken task
-# rather than a missing dependency.
-#
-# The package repository publishes native amd64 and arm64 builds. Only the
-# stripped executable is copied from the throwaway stage.
+# Every seeder, verifier and reference-app helper talks to the database through
+# mongosh. Verify it during the image build so a future base-image update fails
+# clearly instead of producing an opaque runtime error.
 # ---------------------------------------------------------------------------
-COPY --from=mongosh /usr/bin/mongosh /usr/local/bin/mongosh
-RUN set -eux; \
-    test "$(mongosh --version | tr -d '\r')" = "${MONGOSH_VERSION}"
+RUN command -v mongosh && mongosh --version
 
 # ---------------------------------------------------------------------------
 # Verifier dependencies, installed from VENDORED WHEELS with no network.
@@ -98,9 +73,8 @@ RUN set -eux; \
 # --no-index makes the guarantee enforceable: if a wheel is missing the build
 # FAILS rather than silently reaching out to the network.
 #
-# No --break-system-packages: this base is Ubuntu 22.04 with pip 22.x, which
-# does not have that flag (it arrived in pip 23 for PEP 668). Jammy is not
-# externally-managed, so a plain install is correct here.
+# PIP_BREAK_SYSTEM_PACKAGES is set above because the pinned Debian base enables
+# PEP 668 and the benchmark deliberately treats the container as disposable.
 # ---------------------------------------------------------------------------
 COPY .wheels /opt/wheels
 # psycopg is what makes check_engine.py possible: it reads the PostgreSQL

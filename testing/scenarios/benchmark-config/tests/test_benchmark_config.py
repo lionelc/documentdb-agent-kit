@@ -557,10 +557,13 @@ def test_build_entrypoint_uses_native_supported_architecture():
     assert 'VENDOR_ARCH="$BENCHMARK_ARCH"' in build
     assert 'PIP_PLATFORM="manylinux2014_x86_64"' in vendor
     assert 'PIP_PLATFORM="manylinux2014_aarch64"' in vendor
-    assert "repo.mongodb.org/apt/debian" in dockerfile
-    assert "arch=amd64,arm64" in dockerfile
-    assert '"mongodb-mongosh=${MONGOSH_VERSION}"' in dockerfile
-    assert "COPY --from=mongosh /usr/bin/mongosh" in dockerfile
+    assert 'PYVER="${VENDOR_PYTHON_VERSION:-313}"' in vendor
+    assert 'TARGET_KEY="${PIP_PLATFORM}-cp${PYVER}"' in vendor
+    assert "ghcr.io/documentdb/documentdb/documentdb-local@sha256:" in dockerfile
+    assert "RUN command -v mongosh && mongosh --version" in dockerfile
+    assert "apt-get install" not in dockerfile.split("# mongosh.", 1)[1]
+    assert "downloads.mongodb.com/compass" not in dockerfile
+    assert "ENV PIP_BREAK_SYSTEM_PACKAGES=1" in dockerfile
     assert "docker image inspect" in verify
     assert 'docker run --rm --platform "$BENCHMARK_PLATFORM"' in verify
 

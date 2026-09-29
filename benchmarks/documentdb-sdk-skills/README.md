@@ -217,9 +217,9 @@ bash verify-controls.sh
 
 The build entrypoint detects the Docker daemon architecture and builds native
 `linux/amd64` or `linux/arm64` images. It vendors matching Python wheels and
-installs the pinned native `mongodb-mongosh` package from MongoDB's official
-APT repository; verification reads the built image's architecture and runs the
-controls on the same platform.
+uses the `mongosh` bundled in the pinned official DocumentDB Local image;
+verification reads the built image's architecture and runs the controls on the
+same platform.
 
 `--backend local` lets MSBench run harbor-native benchmarks entirely on your
 machine, so the whole benchmark can be iterated **without** pushing to the

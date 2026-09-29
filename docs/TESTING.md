@@ -258,9 +258,9 @@ bash verify-controls.sh
 ```
 
 The build entrypoint detects the Docker daemon architecture and builds native
-`linux/amd64` or `linux/arm64` images with matching Python wheels and the
-pinned native `mongodb-mongosh` package from MongoDB's official APT repository.
-Verification reads the built image's architecture and uses the same platform.
+`linux/amd64` or `linux/arm64` images with matching Python wheels. The pinned
+official DocumentDB Local base image already includes `mongosh`; verification
+reads the built image's architecture and uses the same platform.
 
 Both controls matter. A grader that cannot be satisfied makes every score
 meaningless; a grader that never fails is worthless.
