@@ -24,6 +24,18 @@
 set -euo pipefail
 
 DEST="${1:-.wheels}"
+TARGET_ARCH="${VENDOR_ARCH:-}"
+case "$TARGET_ARCH" in
+    amd64|x86_64) TARGET_ARCH="amd64"; PIP_PLATFORM="manylinux2014_x86_64" ;;
+    arm64|aarch64) TARGET_ARCH="arm64"; PIP_PLATFORM="manylinux2014_aarch64" ;;
+    *)
+        echo "vendor-wheels: set VENDOR_ARCH to amd64 or arm64" >&2
+        exit 2
+        ;;
+esac
+TARGET_MARKER="$DEST/.target-platform"
+PYVER="${VENDOR_PYTHON_VERSION:-313}"
+TARGET_KEY="${PIP_PLATFORM}-cp${PYVER}"
 
 # Pinned, and shared by the base image (verifier) and the task image
 # (reference app). One list keeps them from drifting apart.
@@ -37,29 +49,25 @@ PACKAGES=(
     "fastapi==0.115.4"
     "uvicorn[standard]==0.32.0"
     "pydantic==2.9.2"
-    # Backports that only apply to the TARGET interpreter (3.10), listed
-    # explicitly because pip evaluates `python_version` environment markers
-    # against the interpreter RUNNING the download, not --python-version. On a
-    # 3.12 host these silently resolve to "not needed" and the image build then
-    # fails with "No matching distribution found for tomli".
-    "tomli==2.0.2"
-    "exceptiongroup==1.2.2"
 )
 
-mkdir -p "$DEST"
-
-# Already vendored? Skip the download — this script runs on every build.
-if [ -n "$(ls -A "$DEST" 2>/dev/null || true)" ] && [ -z "${VENDOR_FORCE:-}" ]; then
+# Already vendored for this architecture and Python ABI? Skip the download. If
+# either changed, discard the incompatible wheels before resolving the set.
+if [ -f "$TARGET_MARKER" ] &&
+        [ "$(cat "$TARGET_MARKER")" = "$TARGET_KEY" ] &&
+        [ -z "${VENDOR_FORCE:-}" ]; then
     echo "    $DEST already populated ($(find "$DEST" -maxdepth 1 -type f | wc -l) files); set VENDOR_FORCE=1 to refresh"
     exit 0
 fi
+rm -rf "$DEST"
+mkdir -p "$DEST"
 
-echo "    resolving ${#PACKAGES[@]} pinned packages into $DEST"
+echo "    resolving ${#PACKAGES[@]} pinned packages for $TARGET_ARCH into $DEST"
 
-# Target the image's interpreter, not the host's: the container is Ubuntu 22.04
-# (CPython 3.10, manylinux x86_64). Without these constraints pip would happily
-# fetch wheels for the host's Python and they would not import in the image.
-PYVER="${VENDOR_PYTHON_VERSION:-310}"
+# Target the pinned image's interpreter, not the host's: the container uses
+# CPython 3.13 on manylinux. Without these
+# constraints pip would happily fetch wheels for the host's Python and they
+# would not import in the image.
 
 if ! python3 -m pip download \
         --dest "$DEST" \
@@ -67,7 +75,7 @@ if ! python3 -m pip download \
         --python-version "$PYVER" \
         --implementation cp \
         --abi "cp${PYVER}" \
-        --platform manylinux2014_x86_64 \
+        --platform "$PIP_PLATFORM" \
         "${PACKAGES[@]}" 2>&1 | tail -5; then
     echo
     echo "vendor-wheels: download FAILED." >&2
@@ -78,4 +86,5 @@ if ! python3 -m pip download \
     exit 1
 fi
 
+printf '%s\n' "$TARGET_KEY" > "$TARGET_MARKER"
 echo "    vendored $(find "$DEST" -maxdepth 1 -type f | wc -l) wheels"

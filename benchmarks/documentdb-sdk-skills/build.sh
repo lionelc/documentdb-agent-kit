@@ -31,11 +31,18 @@ HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO="$(cd "$HERE/../.." && pwd)"
 BASE_TAG="${BASE_TAG:-documentdb-orders-base:latest}"
 TASK_TAG="${TASK_TAG:-documentdb-orders-api-python:latest}"
-# The benchmark inputs are intentionally x86-64: vendor-wheels.sh downloads
-# manylinux x86_64 wheels and the Dockerfile installs the pinned x64 mongosh
-# archive. Pin both builds so Docker Desktop uses amd64 emulation on arm64
-# hosts instead of combining an arm64 base image with x86-64 dependencies.
-BENCHMARK_PLATFORM="linux/amd64"
+
+DOCKER_ARCH="${BENCHMARK_ARCH:-$(docker version --format '{{.Server.Arch}}')}"
+case "$DOCKER_ARCH" in
+    amd64|x86_64) BENCHMARK_ARCH="amd64" ;;
+    arm64|aarch64) BENCHMARK_ARCH="arm64" ;;
+    *)
+        echo "Unsupported Docker architecture: $DOCKER_ARCH" >&2
+        echo "Supported architectures: amd64, arm64" >&2
+        exit 1
+        ;;
+esac
+BENCHMARK_PLATFORM="linux/$BENCHMARK_ARCH"
 
 cd "$HERE"
 
@@ -50,7 +57,7 @@ echo "    staged $(find .skills -name SKILL.md | wc -l) skills"
 # ---------------------------------------------------------------------------
 echo "==> Vendoring Python wheels"
 # ---------------------------------------------------------------------------
-bash shared/base/vendor-wheels.sh .wheels
+VENDOR_ARCH="$BENCHMARK_ARCH" bash shared/base/vendor-wheels.sh .wheels
 
 # ---------------------------------------------------------------------------
 echo "==> Building base image: $BASE_TAG"

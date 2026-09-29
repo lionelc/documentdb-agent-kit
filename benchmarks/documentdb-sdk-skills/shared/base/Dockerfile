@@ -19,10 +19,11 @@
 # layer is PUBLIC — so anyone can reproduce this image even though the MSBench
 # harness itself is Microsoft-internal.
 
-# Pinned from ghcr.io/microsoft/documentdb/documentdb-local:latest on
-# 2026-09-22. Update deliberately and rerun the benchmark controls when the
-# base changes; a mutable tag would silently change the published environment.
-FROM ghcr.io/microsoft/documentdb/documentdb-local@sha256:0fcf634531c1917ad0855ff9f4354aca0a5c5d8e435f08250568deb37eeb0ad5
+# Pinned from ghcr.io/documentdb/documentdb/documentdb-local:latest on
+# 2026-09-28. This official multi-architecture image includes mongosh. Update
+# deliberately and rerun the benchmark controls when the base changes; a
+# mutable tag would silently change the published environment.
+FROM ghcr.io/documentdb/documentdb/documentdb-local@sha256:a22772de11861a97d395eecdbe6fbaedd245498b015e748ca409f526430ca781
 
 USER root
 WORKDIR /
@@ -33,8 +34,10 @@ WORKDIR /
 ENTRYPOINT []
 CMD ["/bin/bash"]
 
-ARG MONGOSH_VERSION=2.3.8
-ARG MONGOSH_SHA256=23edb768189663aaa9732a2340a25b5fc05a314940538809a7840be7f2ce221f
+# The pinned Debian base enforces PEP 668. This is an isolated benchmark image,
+# and the task contract expects agent-authored build.sh scripts to use pip3
+# directly, so explicitly allow system installs inside this disposable image.
+ENV PIP_BREAK_SYSTEM_PACKAGES=1
 
 RUN set -eux; \
     apt-get update; \
@@ -48,27 +51,13 @@ RUN set -eux; \
 # present at /usr/bin/which.
 
 # ---------------------------------------------------------------------------
-# mongosh. NOT OPTIONAL, and not present upstream.
+# mongosh. NOT OPTIONAL, and provided by the pinned official base image.
 #
-# The documentdb-local image ships `psql` but NO `mongosh` (verified against
-# the pristine image). Every seeder, the verifier and the reference app's
-# tooling talk to the database through it. Without this the whole benchmark
-# fails with "executable file not found", which reads like a broken task
-# rather than a missing dependency.
-#
-# Download directly from MongoDB's official distribution endpoint. The binary
-# is not stored in this repository. Both version and archive digest are pinned
-# so a changed upstream file cannot silently alter the benchmark image.
+# Every seeder, verifier and reference-app helper talks to the database through
+# mongosh. Verify it during the image build so a future base-image update fails
+# clearly instead of producing an opaque runtime error.
 # ---------------------------------------------------------------------------
-RUN set -eux; \
-    curl -fsSL "https://downloads.mongodb.com/compass/mongosh-${MONGOSH_VERSION}-linux-x64.tgz" \
-        -o /tmp/mongosh.tgz; \
-    echo "${MONGOSH_SHA256}  /tmp/mongosh.tgz" | sha256sum -c -; \
-    tar xzf /tmp/mongosh.tgz -C /tmp; \
-    cp "/tmp/mongosh-${MONGOSH_VERSION}-linux-x64/bin/mongosh" /usr/local/bin/mongosh; \
-    cp "/tmp/mongosh-${MONGOSH_VERSION}-linux-x64/bin/mongosh_crypt_v1.so" /usr/local/lib/ || true; \
-    rm -rf /tmp/mongosh.tgz "/tmp/mongosh-${MONGOSH_VERSION}-linux-x64"; \
-    test "$(mongosh --version | tr -d '\r')" = "${MONGOSH_VERSION}"
+RUN command -v mongosh && mongosh --version
 
 # ---------------------------------------------------------------------------
 # Verifier dependencies, installed from VENDORED WHEELS with no network.
@@ -84,9 +73,8 @@ RUN set -eux; \
 # --no-index makes the guarantee enforceable: if a wheel is missing the build
 # FAILS rather than silently reaching out to the network.
 #
-# No --break-system-packages: this base is Ubuntu 22.04 with pip 22.x, which
-# does not have that flag (it arrived in pip 23 for PEP 668). Jammy is not
-# externally-managed, so a plain install is correct here.
+# PIP_BREAK_SYSTEM_PACKAGES is set above because the pinned Debian base enables
+# PEP 668 and the benchmark deliberately treats the container as disposable.
 # ---------------------------------------------------------------------------
 COPY .wheels /opt/wheels
 # psycopg is what makes check_engine.py possible: it reads the PostgreSQL
